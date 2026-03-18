@@ -1,0 +1,35 @@
+﻿title: Result Schema
+type: object
+required:
+  - project_type
+  - artifacts
+  - environment
+  - request
+  - acceptance
+  - outputs
+  - summary
+  - defects
+  - coverage
+properties:
+  project_type:
+    type: string
+  artifacts:
+    type: array
+    items:
+      type: object
+  environment:
+    type: object
+  request:
+    type: object
+  acceptance:
+    type: object
+  outputs:
+    type: object
+  summary:
+    type: object
+  defects:
+    type: array
+    items:
+      type: object
+  coverage:
+    type: object

@@ -1,0 +1,21 @@
+﻿paths:
+  results_dir: results
+  evidence_dir: evidence
+  latest_result_file: results/latest.json
+  latest_plan_file: results/plan_latest.json
+  latest_report_file: results/report_latest.json
+timeouts:
+  web_ms: 8000
+  api_s: 10
+  model_s: 20
+runners:
+  web:
+    browser: chromium
+    headless: true
+  api:
+    pytest_args:
+      - -q
+      - --disable-warnings
+      - --maxfail=1
+  model:
+    default_threshold: 0.7

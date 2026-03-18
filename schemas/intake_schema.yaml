@@ -1,0 +1,26 @@
+﻿title: Intake Schema
+type: object
+required:
+  - project_type
+  - artifacts
+  - environment
+  - request
+  - acceptance
+  - outputs
+properties:
+  project_type:
+    type: string
+    description: Product type for routing adapters
+    enum: [web, api, model, auto]
+  artifacts:
+    type: array
+    items:
+      type: object
+  environment:
+    type: object
+  request:
+    type: object
+  acceptance:
+    type: object
+  outputs:
+    type: object

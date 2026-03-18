@@ -1,0 +1,12 @@
+﻿{
+  "summary": {
+    "status": "unknown",
+    "total_checks": 0,
+    "passed": 0,
+    "failed": 0,
+    "defect_count": 0
+  },
+  "defects": [],
+  "coverage": {},
+  "metadata": {}
+}
