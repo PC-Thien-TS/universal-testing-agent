@@ -3,7 +3,6 @@ from __future__ import annotations
 from adapters.base import BaseAdapter
 from orchestrator.models import (
     AdapterPlan,
-    Defect,
     DiscoveryResult,
     EvidenceBundle,
     ExecutionResult,
@@ -40,24 +39,33 @@ class ModelAdapter(BaseAdapter):
     def execute(self, intake: NormalizedIntake, generated_assets: GeneratedAssets) -> ExecutionResult:
         endpoint = intake.model.get("endpoint") or intake.request.get("model_endpoint") or intake.target or ""
         eval_cases = intake.request.get("eval_cases") or [{"prompt": "Ping", "expected_contains": "pong"}]
+        dataset_path = str(intake.request.get("dataset_path", "")).strip() or None
+        for artifact in intake.artifacts:
+            if artifact.path and ("dataset" in artifact.type.lower() or "sample" in artifact.type.lower()):
+                dataset_path = artifact.path
+                break
+
         threshold = float(intake.acceptance.get("quality_threshold", self.config.runners.model.default_threshold))
         runner_result = run_model_evaluation(
             endpoint=endpoint,
             eval_cases=eval_cases,
             timeout_s=self.config.timeouts.model_s,
             threshold=threshold,
+            labels=intake.labels,
+            dataset_path=dataset_path,
+            dataset_samples=intake.request.get("dataset_samples", []),
         )
-        defects = [Defect.model_validate(item) for item in runner_result.get("defects", [])]
         return ExecutionResult(
             status=runner_result.get("status", "failed"),
-            passed=int(runner_result.get("passed", 0)),
-            failed=int(runner_result.get("failed", 0)),
-            defects=defects,
+            summary=runner_result.get("summary", {}),
+            coverage=runner_result.get("coverage", {}),
+            defect_details=runner_result.get("defects", []),
+            evidence=runner_result.get("evidence", {}),
+            recommendation_notes=runner_result.get("recommendation_notes", []),
             raw_output=runner_result.get("raw_output", {}),
         )
 
     def collect_evidence(self, intake: NormalizedIntake, execution_result: ExecutionResult) -> EvidenceBundle:
-        notes = ["Model evaluation details captured in raw_output."]
-        if score := execution_result.raw_output.get("score"):
-            notes.append(f"Quality score: {score}")
-        return EvidenceBundle(files=[], notes=notes)
+        evidence = execution_result.evidence.model_copy(deep=True)
+        evidence.logs.append(f"Adapter={self.name}; status={execution_result.status}")
+        return evidence

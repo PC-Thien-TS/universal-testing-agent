@@ -3,7 +3,6 @@ from __future__ import annotations
 from adapters.base import BaseAdapter
 from orchestrator.models import (
     AdapterPlan,
-    Defect,
     DiscoveryResult,
     EvidenceBundle,
     ExecutionResult,
@@ -47,19 +46,17 @@ class ApiAdapter(BaseAdapter):
             timeout_s=self.config.timeouts.api_s,
             pytest_args=self.config.runners.api.pytest_args,
         )
-        defects = [Defect.model_validate(item) for item in runner_result.get("defects", [])]
         return ExecutionResult(
             status=runner_result.get("status", "failed"),
-            passed=int(runner_result.get("passed", 0)),
-            failed=int(runner_result.get("failed", 0)),
-            defects=defects,
+            summary=runner_result.get("summary", {}),
+            coverage=runner_result.get("coverage", {}),
+            defect_details=runner_result.get("defects", []),
+            evidence=runner_result.get("evidence", {}),
+            recommendation_notes=runner_result.get("recommendation_notes", []),
             raw_output=runner_result.get("raw_output", {}),
         )
 
     def collect_evidence(self, intake: NormalizedIntake, execution_result: ExecutionResult) -> EvidenceBundle:
-        files: list[str] = []
-        notes: list[str] = []
-        if temp_test := execution_result.raw_output.get("test_file"):
-            files.append(str(temp_test))
-        notes.append("Pytest stdout and stderr captured in raw_output.")
-        return EvidenceBundle(files=files, notes=notes)
+        evidence = execution_result.evidence.model_copy(deep=True)
+        evidence.logs.append(f"Adapter={self.name}; status={execution_result.status}")
+        return evidence

@@ -48,6 +48,7 @@ def normalize_input(manifest: IntakeManifest, manifest_path: str | Path) -> Norm
         url=manifest.url,
         target=target,
         feature=manifest.feature,
+        labels=manifest.labels,
         artifacts=manifest.artifacts,
         environment=manifest.environment,
         request=manifest.request,

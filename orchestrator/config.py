@@ -14,6 +14,7 @@ class PathSettings(BaseModel):
     latest_result_file: str = "results/latest.json"
     latest_plan_file: str = "results/plan_latest.json"
     latest_report_file: str = "results/report_latest.json"
+    latest_report_markdown_file: str = "results/report_latest.md"
 
 
 class TimeoutSettings(BaseModel):
@@ -66,6 +67,8 @@ def load_runtime_config(config_path: str | Path | None = None) -> RuntimeConfig:
         config.paths.latest_plan_file = value
     if value := os.getenv("UTA_REPORT_FILE"):
         config.paths.latest_report_file = value
+    if value := os.getenv("UTA_REPORT_MD_FILE"):
+        config.paths.latest_report_markdown_file = value
     if value := os.getenv("UTA_EVIDENCE_DIR"):
         config.paths.evidence_dir = value
     if value := os.getenv("UTA_TIMEOUT_WEB_MS"):
@@ -84,3 +87,4 @@ def ensure_runtime_dirs(config: RuntimeConfig) -> None:
     Path(config.paths.latest_result_file).parent.mkdir(parents=True, exist_ok=True)
     Path(config.paths.latest_plan_file).parent.mkdir(parents=True, exist_ok=True)
     Path(config.paths.latest_report_file).parent.mkdir(parents=True, exist_ok=True)
+    Path(config.paths.latest_report_markdown_file).parent.mkdir(parents=True, exist_ok=True)

@@ -1,11 +1,40 @@
-﻿{
+{
+  "run_id": "",
+  "project_name": "",
   "project_type": "web",
-  "artifacts": [],
-  "environment": {},
-  "request": {},
-  "acceptance": {},
-  "outputs": {},
-  "summary": {},
-  "defects": [],
-  "coverage": {}
+  "adapter": "web",
+  "status": "blocked",
+  "started_at": "",
+  "finished_at": "",
+  "duration_seconds": 0.0,
+  "summary": {
+    "total_checks": 0,
+    "passed": 0,
+    "failed": 0,
+    "blocked": 0,
+    "skipped": 0
+  },
+  "coverage": {
+    "planned_cases": 0,
+    "executed_cases": 0,
+    "execution_rate": 0.0,
+    "requirement_coverage": 0.0
+  },
+  "defects": {
+    "blocker": 0,
+    "critical": 0,
+    "high": 0,
+    "medium": 0,
+    "low": 0
+  },
+  "evidence": {
+    "logs": [],
+    "screenshots": [],
+    "traces": [],
+    "artifacts": []
+  },
+  "recommendation": {
+    "release_ready": false,
+    "notes": []
+  }
 }

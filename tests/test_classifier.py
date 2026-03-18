@@ -8,6 +8,8 @@ def _intake(
     artifacts: list[Artifact] | None = None,
     project_type: str = "auto",
     model: dict | None = None,
+    request: dict | None = None,
+    labels: list[str] | None = None,
 ) -> NormalizedIntake:
     return NormalizedIntake(
         manifest_path="test.yaml",
@@ -15,9 +17,10 @@ def _intake(
         project_type=project_type,
         url=url,
         target=url,
+        labels=labels or [],
         artifacts=artifacts or [],
         environment={},
-        request={},
+        request=request or {},
         acceptance={},
         outputs={},
         auth={},
@@ -39,4 +42,9 @@ def test_classifier_detects_api_from_openapi_artifact() -> None:
 
 def test_classifier_detects_model_from_endpoint() -> None:
     intake = _intake(model={"endpoint": "https://api.example.com/v1/model"})
+    assert classify_product(intake) == "model"
+
+
+def test_classifier_detects_model_from_labels_hint() -> None:
+    intake = _intake(labels=["safe", "unsafe"], request={"goal": "evaluation"})
     assert classify_product(intake) == "model"

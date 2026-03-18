@@ -12,6 +12,13 @@ def test_load_manifest_valid_sample() -> None:
     assert manifest.outputs["report_format"] == "json"
 
 
+def test_load_manifest_valid_api_and_model_samples() -> None:
+    api_manifest = load_manifest(Path("manifests/samples/api_verify_store.yaml"))
+    model_manifest = load_manifest(Path("manifests/samples/model_basalt.yaml"))
+    assert api_manifest.project_type == "api"
+    assert model_manifest.project_type == "model"
+
+
 def test_load_manifest_missing_required_sections(tmp_path: Path) -> None:
     invalid_manifest = tmp_path / "invalid.yaml"
     invalid_manifest.write_text(

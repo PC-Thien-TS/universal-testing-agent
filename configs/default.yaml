@@ -4,6 +4,7 @@
   latest_result_file: results/latest.json
   latest_plan_file: results/plan_latest.json
   latest_report_file: results/report_latest.json
+  latest_report_markdown_file: results/report_latest.md
 timeouts:
   web_ms: 8000
   api_s: 10

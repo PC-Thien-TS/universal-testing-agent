@@ -1,0 +1,27 @@
+name: api-verify-store
+project_type: api
+artifacts:
+  - name: verify-store-openapi
+    type: openapi-spec
+    path: manifests/samples/verify_store_openapi.yaml
+environment:
+  stage: staging
+  base_url: ""
+  auth:
+    type: basic
+    username_env: STORE_API_USER
+    password_env: STORE_API_PASS
+request:
+  goal: Verify store API smoke behavior and contract indicators
+  endpoints:
+    - /store/health
+    - /store/items
+acceptance:
+  max_failed: 0
+  coverage_threshold: 0.6
+constraints:
+  - No destructive write operations
+  - Offline deterministic behavior preferred when endpoint unavailable
+outputs:
+  report_format: json
+  include_markdown: true

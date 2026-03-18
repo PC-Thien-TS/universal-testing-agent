@@ -10,7 +10,7 @@ from orchestrator.config import ensure_runtime_dirs, load_runtime_config
 from orchestrator.executor import execute_pipeline, load_execution_result, save_execution_result
 from orchestrator.intake import load_and_normalize, load_manifest
 from orchestrator.planner import generate_test_strategy
-from orchestrator.reporter import generate_report, save_report
+from orchestrator.reporter import generate_report, save_markdown_report, save_report
 from orchestrator.router import select_adapter
 
 
@@ -79,6 +79,8 @@ def handle_run(args: argparse.Namespace) -> int:
             "adapter": adapter.name,
             "run_status": envelope.status,
             "result_file": str(result_path),
+            "summary": envelope.summary.model_dump(mode="json"),
+            "recommendation": envelope.recommendation.model_dump(mode="json"),
         }
     )
     return 0
@@ -92,14 +94,17 @@ def handle_report(args: argparse.Namespace) -> int:
     report = generate_report(envelope)
 
     report_path = _resolve_output_path(args.output, config.paths.latest_report_file)
+    markdown_path = _resolve_output_path(args.markdown_output, config.paths.latest_report_markdown_file)
     save_report(report, report_path)
+    save_markdown_report(report, markdown_path)
 
     _print_json(
         {
             "status": "reported",
             "source_result": args.result_json,
             "report_file": str(report_path),
-            "summary": report.summary,
+            "markdown_report_file": str(markdown_path),
+            "summary": report.summary.model_dump(mode="json"),
         }
     )
     return 0
@@ -126,6 +131,7 @@ def build_parser() -> argparse.ArgumentParser:
     report_parser = subparsers.add_parser("report", help="Generate standardized report from result JSON")
     report_parser.add_argument("result_json", help="Path to execution result JSON")
     report_parser.add_argument("--output", help="Output path for report JSON", default=None)
+    report_parser.add_argument("--markdown-output", help="Output path for report Markdown", default=None)
     report_parser.set_defaults(handler=handle_report)
 
     return parser

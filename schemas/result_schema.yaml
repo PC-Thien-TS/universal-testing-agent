@@ -1,35 +1,105 @@
-﻿title: Result Schema
+title: Result Schema v1.2
 type: object
 required:
+  - run_id
+  - project_name
   - project_type
-  - artifacts
-  - environment
-  - request
-  - acceptance
-  - outputs
+  - adapter
+  - status
+  - started_at
+  - finished_at
+  - duration_seconds
   - summary
-  - defects
   - coverage
+  - defects
+  - evidence
+  - recommendation
 properties:
+  run_id:
+    type: string
+  project_name:
+    type: string
   project_type:
     type: string
-  artifacts:
-    type: array
-    items:
-      type: object
-  environment:
-    type: object
-  request:
-    type: object
-  acceptance:
-    type: object
-  outputs:
-    type: object
+    enum: [web, api, model]
+  adapter:
+    type: string
+  status:
+    type: string
+    enum: [passed, failed, blocked, error]
+  started_at:
+    type: string
+  finished_at:
+    type: string
+  duration_seconds:
+    type: number
   summary:
     type: object
-  defects:
-    type: array
-    items:
-      type: object
+    required: [total_checks, passed, failed, blocked, skipped]
+    properties:
+      total_checks:
+        type: integer
+      passed:
+        type: integer
+      failed:
+        type: integer
+      blocked:
+        type: integer
+      skipped:
+        type: integer
   coverage:
     type: object
+    required: [planned_cases, executed_cases, execution_rate, requirement_coverage]
+    properties:
+      planned_cases:
+        type: integer
+      executed_cases:
+        type: integer
+      execution_rate:
+        type: number
+      requirement_coverage:
+        type: number
+  defects:
+    type: object
+    required: [blocker, critical, high, medium, low]
+    properties:
+      blocker:
+        type: integer
+      critical:
+        type: integer
+      high:
+        type: integer
+      medium:
+        type: integer
+      low:
+        type: integer
+  evidence:
+    type: object
+    required: [logs, screenshots, traces, artifacts]
+    properties:
+      logs:
+        type: array
+        items:
+          type: string
+      screenshots:
+        type: array
+        items:
+          type: string
+      traces:
+        type: array
+        items:
+          type: string
+      artifacts:
+        type: array
+        items:
+          type: string
+  recommendation:
+    type: object
+    required: [release_ready, notes]
+    properties:
+      release_ready:
+        type: boolean
+      notes:
+        type: array
+        items:
+          type: string

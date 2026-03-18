@@ -3,7 +3,6 @@ from __future__ import annotations
 from adapters.base import BaseAdapter
 from orchestrator.models import (
     AdapterPlan,
-    Defect,
     DiscoveryResult,
     EvidenceBundle,
     ExecutionResult,
@@ -41,22 +40,17 @@ class WebAdapter(BaseAdapter):
             browser=self.config.runners.web.browser,
             headless=self.config.runners.web.headless,
         )
-        defects = [Defect.model_validate(item) for item in runner_result.get("defects", [])]
         return ExecutionResult(
             status=runner_result.get("status", "failed"),
-            passed=int(runner_result.get("passed", 0)),
-            failed=int(runner_result.get("failed", 0)),
-            defects=defects,
+            summary=runner_result.get("summary", {}),
+            coverage=runner_result.get("coverage", {}),
+            defect_details=runner_result.get("defects", []),
+            evidence=runner_result.get("evidence", {}),
+            recommendation_notes=runner_result.get("recommendation_notes", []),
             raw_output=runner_result.get("raw_output", {}),
         )
 
     def collect_evidence(self, intake: NormalizedIntake, execution_result: ExecutionResult) -> EvidenceBundle:
-        files: list[str] = []
-        notes: list[str] = []
-        screenshot = execution_result.raw_output.get("screenshot")
-        if screenshot:
-            files.append(str(screenshot))
-        else:
-            notes.append("No screenshot captured.")
-        notes.append(f"Execution status: {execution_result.status}")
-        return EvidenceBundle(files=files, notes=notes)
+        evidence = execution_result.evidence.model_copy(deep=True)
+        evidence.logs.append(f"Adapter={self.name}; status={execution_result.status}")
+        return evidence
