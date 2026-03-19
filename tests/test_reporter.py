@@ -81,3 +81,6 @@ def test_markdown_report_renders_sections() -> None:
     assert "## Execution Summary" in markdown
     assert "## Release Recommendation" in markdown
     assert "## Policy Evaluation" in markdown
+    assert "## Trend Summary" in markdown
+    assert "## Contract Validation Summary" in markdown
+    assert "## Comparison Summary" in markdown

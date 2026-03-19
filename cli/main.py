@@ -7,13 +7,17 @@ from typing import Any
 
 from orchestrator.asset_generator import generate_assets
 from orchestrator.classifier import classify_product
+from orchestrator.compare import compare_results, save_comparison
 from orchestrator.config import RuntimeConfig, ensure_runtime_dirs, load_runtime_config
+from orchestrator.contracts import save_contract_validation, validate_contracts
 from orchestrator.executor import execute_pipeline, load_execution_result, save_execution_result
+from orchestrator.history import load_history_records, persist_history_record, record_from_execution, record_from_report
 from orchestrator.intake import load_and_normalize, load_manifest
 from orchestrator.observability import RunObserver
 from orchestrator.planner import generate_test_strategy
 from orchestrator.reporter import generate_report, save_markdown_report, save_report
 from orchestrator.router import select_adapter
+from orchestrator.trends import analyze_trends, save_trends
 
 
 def _resolve_output_path(explicit_path: str | None, default_path: str) -> Path:
@@ -28,6 +32,18 @@ def _print_json(payload: dict[str, Any]) -> None:
 
 def _observer(config: RuntimeConfig, command: str, manifest_path: str = "") -> RunObserver:
     return RunObserver(runs_dir=config.paths.runs_dir, command=command, manifest_path=manifest_path)
+
+
+def _persist_history_from_execution(envelope: Any, config: RuntimeConfig) -> str:
+    record = record_from_execution(envelope)
+    record_path = persist_history_record(record, config.paths.history_dir, config.paths.history_index_file)
+    return str(record_path)
+
+
+def _persist_history_from_report(report: Any, config: RuntimeConfig) -> str:
+    record = record_from_report(report)
+    record_path = persist_history_record(record, config.paths.history_dir, config.paths.history_index_file)
+    return str(record_path)
 
 
 def handle_validate_manifest(args: argparse.Namespace) -> int:
@@ -173,6 +189,7 @@ def handle_run(args: argparse.Namespace) -> int:
 
         result_path = _resolve_output_path(args.output, config.paths.latest_result_file)
         save_execution_result(envelope, result_path)
+        history_record_path = _persist_history_from_execution(envelope, config)
 
         _print_json(
             {
@@ -182,6 +199,7 @@ def handle_run(args: argparse.Namespace) -> int:
                 "adapter": adapter.name,
                 "run_status": envelope.status,
                 "result_file": str(result_path),
+                "history_record_file": history_record_path,
                 "summary": envelope.summary.model_dump(mode="json"),
                 "recommendation": envelope.recommendation.model_dump(mode="json"),
                 "run_id": run_metadata.run_id,
@@ -211,7 +229,7 @@ def handle_report(args: argparse.Namespace) -> int:
     try:
         envelope = load_execution_result(args.result_json)
         observer.update_context(project_name=envelope.project_name, project_type=envelope.project_type)
-        report = generate_report(envelope)
+        report = generate_report(envelope, config=config)
 
         report_path = _resolve_output_path(args.output, config.paths.latest_report_file)
         markdown_path = _resolve_output_path(args.markdown_output, config.paths.latest_report_markdown_file)
@@ -219,6 +237,7 @@ def handle_report(args: argparse.Namespace) -> int:
         save_markdown_report(report, markdown_path)
         observer.log("Report generation completed.")
         run_metadata = observer.finalize(status="reported")
+        history_record_path = _persist_history_from_report(report, config)
 
         _print_json(
             {
@@ -226,6 +245,7 @@ def handle_report(args: argparse.Namespace) -> int:
                 "source_result": args.result_json,
                 "report_file": str(report_path),
                 "markdown_report_file": str(markdown_path),
+                "history_record_file": history_record_path,
                 "summary": report.summary.model_dump(mode="json"),
                 "policy": report.policy.model_dump(mode="json"),
                 "run_id": run_metadata.run_id,
@@ -240,6 +260,123 @@ def handle_report(args: argparse.Namespace) -> int:
             {
                 "status": "error",
                 "source_result": args.result_json,
+                "error": str(exc),
+                "run_id": run_metadata.run_id,
+                "artifact_dir": run_metadata.artifact_dir,
+            }
+        )
+        return 1
+
+
+def handle_trends(args: argparse.Namespace) -> int:
+    config = load_runtime_config()
+    ensure_runtime_dirs(config)
+    observer = _observer(config, "trends")
+    try:
+        records = load_history_records(config.paths.history_dir)
+        trends = analyze_trends(records)
+        json_path, md_path = save_trends(
+            trends,
+            config.paths.latest_trends_file,
+            config.paths.latest_trends_markdown_file,
+        )
+        observer.log("Trend analysis generated.")
+        run_metadata = observer.finalize(status="analyzed")
+        _print_json(
+            {
+                "status": "analyzed",
+                "trends_file": str(json_path),
+                "trends_markdown_file": str(md_path),
+                "trends": trends.model_dump(mode="json"),
+                "run_id": run_metadata.run_id,
+                "artifact_dir": run_metadata.artifact_dir,
+            }
+        )
+        return 0
+    except Exception as exc:
+        observer.log(f"Trend analysis failed: {exc}")
+        run_metadata = observer.finalize(status="error")
+        _print_json(
+            {
+                "status": "error",
+                "error": str(exc),
+                "run_id": run_metadata.run_id,
+                "artifact_dir": run_metadata.artifact_dir,
+            }
+        )
+        return 1
+
+
+def handle_validate_contract(args: argparse.Namespace) -> int:
+    config = load_runtime_config()
+    ensure_runtime_dirs(config)
+    observer = _observer(config, "validate-contract", manifest_path=args.manifest)
+    try:
+        result = validate_contracts(args.manifest, result_path=args.result)
+        json_path, md_path = save_contract_validation(
+            result,
+            config.paths.latest_contract_validation_file,
+            config.paths.latest_contract_validation_markdown_file,
+        )
+        observer.log("Contract validation completed.")
+        run_metadata = observer.finalize(status=result.verdict)
+        _print_json(
+            {
+                "status": "validated",
+                "manifest": args.manifest,
+                "result_file": str(json_path),
+                "markdown_file": str(md_path),
+                "contract_validation": result.model_dump(mode="json"),
+                "run_id": run_metadata.run_id,
+                "artifact_dir": run_metadata.artifact_dir,
+            }
+        )
+        return 0 if result.release_ready else 0
+    except Exception as exc:
+        observer.log(f"Contract validation failed: {exc}")
+        run_metadata = observer.finalize(status="error")
+        _print_json(
+            {
+                "status": "error",
+                "manifest": args.manifest,
+                "error": str(exc),
+                "run_id": run_metadata.run_id,
+                "artifact_dir": run_metadata.artifact_dir,
+            }
+        )
+        return 1
+
+
+def handle_compare(args: argparse.Namespace) -> int:
+    config = load_runtime_config()
+    ensure_runtime_dirs(config)
+    observer = _observer(config, "compare")
+    try:
+        comparison = compare_results(args.current_result, args.baseline_result)
+        json_path, md_path = save_comparison(
+            comparison,
+            config.paths.latest_compare_file,
+            config.paths.latest_compare_markdown_file,
+        )
+        observer.log("Comparison completed.")
+        run_metadata = observer.finalize(status="compared")
+        _print_json(
+            {
+                "status": "compared",
+                "compare_file": str(json_path),
+                "compare_markdown_file": str(md_path),
+                "comparison": comparison.model_dump(mode="json"),
+                "run_id": run_metadata.run_id,
+                "artifact_dir": run_metadata.artifact_dir,
+            }
+        )
+        return 0
+    except Exception as exc:
+        observer.log(f"Compare command failed: {exc}")
+        run_metadata = observer.finalize(status="error")
+        _print_json(
+            {
+                "status": "error",
                 "error": str(exc),
                 "run_id": run_metadata.run_id,
                 "artifact_dir": run_metadata.artifact_dir,
@@ -275,6 +412,19 @@ def build_parser() -> argparse.ArgumentParser:
     report_parser.add_argument("--output", help="Output path for report JSON", default=None)
     report_parser.add_argument("--markdown-output", help="Output path for report Markdown", default=None)
     report_parser.set_defaults(handler=handle_report)
+
+    trends_parser = subparsers.add_parser("trends", help="Analyze trend history and emit trend reports")
+    trends_parser.set_defaults(handler=handle_trends)
+
+    contract_parser = subparsers.add_parser("validate-contract", help="Validate manifest/result contracts")
+    contract_parser.add_argument("manifest", help="Path to manifest file")
+    contract_parser.add_argument("--result", help="Optional result JSON path", default=None)
+    contract_parser.set_defaults(handler=handle_validate_contract)
+
+    compare_parser = subparsers.add_parser("compare", help="Compare current and baseline result files")
+    compare_parser.add_argument("current_result", help="Path to current result JSON")
+    compare_parser.add_argument("baseline_result", help="Path to baseline result JSON")
+    compare_parser.set_defaults(handler=handle_compare)
 
     return parser
 

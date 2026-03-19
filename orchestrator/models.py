@@ -145,6 +145,47 @@ class RunMetadata(UtaModel):
     artifact_dir: str
 
 
+class HistoryRecord(UtaModel):
+    run_id: str
+    timestamp: str
+    project_name: str
+    project_type: str
+    adapter: str
+    status: str
+    summary: SummaryStats
+    coverage: CoverageStats
+    defects: DefectSummary
+    release_ready: bool
+
+
+class TrendAnalysis(UtaModel):
+    runs_analyzed: int = 0
+    overall_direction: Literal["improving", "stable", "degrading"] = "stable"
+    pass_rate_trend: Literal["improving", "stable", "degrading"] = "stable"
+    coverage_trend: Literal["improving", "stable", "degrading"] = "stable"
+    defect_trend: Literal["improving", "stable", "degrading"] = "stable"
+    release_readiness_trend: Literal["improving", "stable", "degrading"] = "stable"
+
+
+class ContractValidationResult(UtaModel):
+    release_ready: bool = False
+    verdict: str = "fail"
+    checks: dict[str, Any] = Field(default_factory=dict)
+    reasons: list[str] = Field(default_factory=list)
+
+
+class ComparisonResult(UtaModel):
+    current_result_path: str
+    baseline_result_path: str
+    changed: bool
+    passed_delta: int
+    failed_delta: int
+    coverage_delta: float
+    defect_delta: int
+    release_ready_changed: bool
+    regression_signals: list[str] = Field(default_factory=list)
+
+
 class ExecutionResult(UtaModel):
     status: Literal["passed", "failed", "blocked", "error"] = "blocked"
     summary: SummaryStats = Field(default_factory=SummaryStats)
@@ -198,6 +239,11 @@ class StandardReport(UtaModel):
     assumptions: list[str] = Field(default_factory=list)
     artifact_references: list[str] = Field(default_factory=list)
     run_metadata: RunMetadata | None = None
+    trend_summary: TrendAnalysis | None = None
+    contract_validation_summary: ContractValidationResult | None = None
+    comparison_summary: ComparisonResult | None = None
+    regression_signals: list[str] = Field(default_factory=list)
+    flaky_suspicion_note: str | None = None
     generated_at: str
 
 

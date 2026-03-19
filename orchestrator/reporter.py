@@ -2,20 +2,48 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import TypeVar
 
-from orchestrator.models import ExecutionEnvelope, StandardReport, utc_now_iso
+from pydantic import BaseModel
+
+from orchestrator.config import RuntimeConfig, load_runtime_config
+from orchestrator.history import load_history_records
+from orchestrator.models import (
+    ComparisonResult,
+    ContractValidationResult,
+    ExecutionEnvelope,
+    StandardReport,
+    TrendAnalysis,
+    utc_now_iso,
+)
 from orchestrator.policy import evaluate_release_policy
+from orchestrator.trends import flaky_suspicion_from_history
+
+TModel = TypeVar("TModel", bound=BaseModel)
 
 
-def _existing_artifact_references(envelope: ExecutionEnvelope) -> list[str]:
+def _load_optional_model(path: Path, model: type[TModel]) -> TModel | None:
+    if not path.exists():
+        return None
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        return model.model_validate(payload)
+    except Exception:
+        return None
+
+
+def _existing_artifact_references(envelope: ExecutionEnvelope, config: RuntimeConfig) -> list[str]:
     references = list(envelope.generated_artifacts)
     well_known = [
-        Path("results/checklist_latest.json"),
-        Path("results/checklist_latest.md"),
-        Path("results/testcases_latest.json"),
-        Path("results/testcases_latest.md"),
-        Path("results/bug_report_template.md"),
-        Path("results/generated_assets_latest.json"),
+        Path(config.paths.latest_checklist_file),
+        Path(config.paths.latest_checklist_markdown_file),
+        Path(config.paths.latest_testcases_file),
+        Path(config.paths.latest_testcases_markdown_file),
+        Path(config.paths.latest_bug_report_template_file),
+        Path(config.paths.latest_generated_assets_index_file),
+        Path(config.paths.latest_trends_file),
+        Path(config.paths.latest_contract_validation_file),
+        Path(config.paths.latest_compare_file),
     ]
     for candidate in well_known:
         if candidate.exists():
@@ -23,7 +51,8 @@ def _existing_artifact_references(envelope: ExecutionEnvelope) -> list[str]:
     return list(dict.fromkeys(references))
 
 
-def generate_report(envelope: ExecutionEnvelope) -> StandardReport:
+def generate_report(envelope: ExecutionEnvelope, config: RuntimeConfig | None = None) -> StandardReport:
+    runtime_config = config or load_runtime_config()
     acceptance = envelope.metadata.get("acceptance", {})
     policy = evaluate_release_policy(
         acceptance=acceptance if isinstance(acceptance, dict) else {},
@@ -31,6 +60,12 @@ def generate_report(envelope: ExecutionEnvelope) -> StandardReport:
         coverage=envelope.coverage,
         defects=envelope.defects,
     )
+
+    trend_summary = _load_optional_model(Path(runtime_config.paths.latest_trends_file), TrendAnalysis)
+    contract_summary = _load_optional_model(
+        Path(runtime_config.paths.latest_contract_validation_file), ContractValidationResult
+    )
+    comparison_summary = _load_optional_model(Path(runtime_config.paths.latest_compare_file), ComparisonResult)
 
     recommendation_notes = list(envelope.recommendation.notes)
     recommendation_notes.extend(policy.reasons)
@@ -50,7 +85,17 @@ def generate_report(envelope: ExecutionEnvelope) -> StandardReport:
     )
     assumptions = list(dict.fromkeys(assumptions))
 
-    artifact_references = _existing_artifact_references(envelope)
+    artifact_references = _existing_artifact_references(envelope, runtime_config)
+
+    regression_signals: list[str] = []
+    if comparison_summary:
+        regression_signals.extend(comparison_summary.regression_signals)
+    if trend_summary and trend_summary.overall_direction == "degrading":
+        regression_signals.append("Trend analysis indicates degrading overall direction.")
+    regression_signals = list(dict.fromkeys(regression_signals))
+
+    history_records = load_history_records(runtime_config.paths.history_dir)
+    flaky_note = flaky_suspicion_from_history(history_records)
 
     return StandardReport(
         run_id=envelope.run_id,
@@ -75,6 +120,11 @@ def generate_report(envelope: ExecutionEnvelope) -> StandardReport:
         assumptions=assumptions,
         artifact_references=artifact_references,
         run_metadata=envelope.run_metadata,
+        trend_summary=trend_summary,
+        contract_validation_summary=contract_summary,
+        comparison_summary=comparison_summary,
+        regression_signals=regression_signals,
+        flaky_suspicion_note=flaky_note,
         generated_at=utc_now_iso(),
     )
 
@@ -93,6 +143,36 @@ def _format_list(items: list[str]) -> str:
 
 
 def render_markdown_report(report: StandardReport) -> str:
+    trend_section = "- (not available)"
+    if report.trend_summary is not None:
+        trend_section = (
+            f"- Runs analyzed: `{report.trend_summary.runs_analyzed}`\n"
+            f"- Overall direction: `{report.trend_summary.overall_direction}`\n"
+            f"- Pass rate trend: `{report.trend_summary.pass_rate_trend}`\n"
+            f"- Coverage trend: `{report.trend_summary.coverage_trend}`\n"
+            f"- Defect trend: `{report.trend_summary.defect_trend}`\n"
+            f"- Release readiness trend: `{report.trend_summary.release_readiness_trend}`"
+        )
+
+    contract_section = "- (not available)"
+    if report.contract_validation_summary is not None:
+        contract_section = (
+            f"- Verdict: `{report.contract_validation_summary.verdict}`\n"
+            f"- Release Ready: `{report.contract_validation_summary.release_ready}`\n"
+            f"- Reasons: {', '.join(report.contract_validation_summary.reasons) if report.contract_validation_summary.reasons else '(none)'}"
+        )
+
+    comparison_section = "- (not available)"
+    if report.comparison_summary is not None:
+        comparison_section = (
+            f"- Changed: `{report.comparison_summary.changed}`\n"
+            f"- Passed delta: `{report.comparison_summary.passed_delta}`\n"
+            f"- Failed delta: `{report.comparison_summary.failed_delta}`\n"
+            f"- Coverage delta: `{report.comparison_summary.coverage_delta}`\n"
+            f"- Defect delta: `{report.comparison_summary.defect_delta}`\n"
+            f"- Release ready changed: `{report.comparison_summary.release_ready_changed}`"
+        )
+
     return f"""# Universal Testing Agent Report
 
 ## Project Summary
@@ -149,6 +229,21 @@ def render_markdown_report(report: StandardReport) -> str:
 
 ## Release Gate Summary
 - Gate: `{report.release_gate_summary}`
+
+## Trend Summary
+{trend_section}
+
+## Contract Validation Summary
+{contract_section}
+
+## Comparison Summary
+{comparison_section}
+
+## Regression Signals
+{_format_list(report.regression_signals)}
+
+## Flaky Suspicion
+- {report.flaky_suspicion_note or "(none)"}
 
 ## Known Gaps
 {_format_list(report.known_gaps)}

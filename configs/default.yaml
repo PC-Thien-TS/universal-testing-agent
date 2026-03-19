@@ -12,6 +12,14 @@ paths:
   latest_testcases_markdown_file: results/testcases_latest.md
   latest_bug_report_template_file: results/bug_report_template.md
   latest_generated_assets_index_file: results/generated_assets_latest.json
+  history_dir: results/history
+  history_index_file: results/history/history_index.json
+  latest_trends_file: results/trends_latest.json
+  latest_trends_markdown_file: results/trends_latest.md
+  latest_contract_validation_file: results/contract_validation_latest.json
+  latest_contract_validation_markdown_file: results/contract_validation_latest.md
+  latest_compare_file: results/compare_latest.json
+  latest_compare_markdown_file: results/compare_latest.md
 timeouts:
   web_ms: 8000
   api_s: 10

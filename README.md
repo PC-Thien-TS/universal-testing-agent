@@ -49,6 +49,36 @@ Universal Testing Agent (`uta`) is a manifest-driven AI testing orchestrator for
   - generated artifact references
 - Extended tests for policy engine, asset generation, CLI asset command, run artifact directory creation, and policy-aware report output.
 
+## v1.4 Release Highlights
+
+- Added run history persistence under `results/history/` with indexed records:
+  - per-record run summaries
+  - `results/history/history_index.json`
+- Added trend analytics (`orchestrator/trends.py`):
+  - runs analyzed
+  - overall/pass-rate/coverage/defect/release-readiness trends
+  - outputs:
+    - `results/trends_latest.json`
+    - `results/trends_latest.md`
+- Added contract validation module (`orchestrator/contracts.py`):
+  - manifest contract checks by product type
+  - result contract basics
+  - API OpenAPI-like basics
+  - model labels/dataset basics
+  - outputs:
+    - `results/contract_validation_latest.json`
+    - `results/contract_validation_latest.md`
+- Added comparison module (`orchestrator/compare.py`) and CLI command:
+  - compare passed/failed/coverage/defects/release readiness
+  - outputs:
+    - `results/compare_latest.json`
+    - `results/compare_latest.md`
+- Extended report content with trend summary, contract summary, comparison summary, regression signals, and flaky suspicion notes.
+- Added CLI commands:
+  - `trends`
+  - `validate-contract`
+  - `compare`
+
 ## Requirements
 
 - Python 3.11+
@@ -68,6 +98,9 @@ uta plan manifests/samples/web_booking.yaml
 uta generate-assets manifests/samples/web_booking.yaml
 uta run manifests/samples/web_booking.yaml
 uta report results/latest.json
+uta trends
+uta validate-contract manifests/samples/api_verify_store.yaml
+uta compare results/latest.json results/latest.json
 ```
 
 ## Project Layout

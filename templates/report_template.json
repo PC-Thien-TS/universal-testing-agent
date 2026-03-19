@@ -48,5 +48,10 @@
   "assumptions": [],
   "artifact_references": [],
   "run_metadata": null,
+  "trend_summary": null,
+  "contract_validation_summary": null,
+  "comparison_summary": null,
+  "regression_signals": [],
+  "flaky_suspicion_note": null,
   "generated_at": ""
 }
