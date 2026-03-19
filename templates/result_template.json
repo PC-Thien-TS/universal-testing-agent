@@ -36,5 +36,12 @@
   "recommendation": {
     "release_ready": false,
     "notes": []
-  }
+  },
+  "policy": null,
+  "run_metadata": null,
+  "generated_artifacts": [],
+  "known_gaps": [],
+  "assumptions": [],
+  "metadata": {},
+  "raw_output": {}
 }

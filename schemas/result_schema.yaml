@@ -1,4 +1,4 @@
-title: Result Schema v1.2
+title: Result Schema v1.3
 type: object
 required:
   - run_id
@@ -103,3 +103,55 @@ properties:
         type: array
         items:
           type: string
+  policy:
+    type: [object, "null"]
+    properties:
+      release_ready:
+        type: boolean
+      verdict:
+        type: string
+      reasons:
+        type: array
+        items:
+          type: string
+      evaluated_rules:
+        type: object
+  run_metadata:
+    type: [object, "null"]
+    properties:
+      run_id:
+        type: string
+      command:
+        type: string
+      project_name:
+        type: string
+      project_type:
+        type: string
+      manifest_path:
+        type: string
+      started_at:
+        type: string
+      finished_at:
+        type: string
+      duration_seconds:
+        type: number
+      status:
+        type: string
+      artifact_dir:
+        type: string
+  generated_artifacts:
+    type: array
+    items:
+      type: string
+  known_gaps:
+    type: array
+    items:
+      type: string
+  assumptions:
+    type: array
+    items:
+      type: string
+  metadata:
+    type: object
+  raw_output:
+    type: object
