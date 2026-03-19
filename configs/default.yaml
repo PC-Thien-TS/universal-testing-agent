@@ -1,10 +1,17 @@
-﻿paths:
+paths:
   results_dir: results
+  runs_dir: results/runs
   evidence_dir: evidence
   latest_result_file: results/latest.json
   latest_plan_file: results/plan_latest.json
   latest_report_file: results/report_latest.json
   latest_report_markdown_file: results/report_latest.md
+  latest_checklist_file: results/checklist_latest.json
+  latest_checklist_markdown_file: results/checklist_latest.md
+  latest_testcases_file: results/testcases_latest.json
+  latest_testcases_markdown_file: results/testcases_latest.md
+  latest_bug_report_template_file: results/bug_report_template.md
+  latest_generated_assets_index_file: results/generated_assets_latest.json
 timeouts:
   web_ms: 8000
   api_s: 10

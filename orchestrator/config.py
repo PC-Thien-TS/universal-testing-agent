@@ -10,11 +10,18 @@ from pydantic import BaseModel, Field
 
 class PathSettings(BaseModel):
     results_dir: str = "results"
+    runs_dir: str = "results/runs"
     evidence_dir: str = "evidence"
     latest_result_file: str = "results/latest.json"
     latest_plan_file: str = "results/plan_latest.json"
     latest_report_file: str = "results/report_latest.json"
     latest_report_markdown_file: str = "results/report_latest.md"
+    latest_checklist_file: str = "results/checklist_latest.json"
+    latest_checklist_markdown_file: str = "results/checklist_latest.md"
+    latest_testcases_file: str = "results/testcases_latest.json"
+    latest_testcases_markdown_file: str = "results/testcases_latest.md"
+    latest_bug_report_template_file: str = "results/bug_report_template.md"
+    latest_generated_assets_index_file: str = "results/generated_assets_latest.json"
 
 
 class TimeoutSettings(BaseModel):
@@ -63,12 +70,26 @@ def load_runtime_config(config_path: str | Path | None = None) -> RuntimeConfig:
 
     if value := os.getenv("UTA_RESULTS_FILE"):
         config.paths.latest_result_file = value
+    if value := os.getenv("UTA_RUNS_DIR"):
+        config.paths.runs_dir = value
     if value := os.getenv("UTA_PLAN_FILE"):
         config.paths.latest_plan_file = value
     if value := os.getenv("UTA_REPORT_FILE"):
         config.paths.latest_report_file = value
     if value := os.getenv("UTA_REPORT_MD_FILE"):
         config.paths.latest_report_markdown_file = value
+    if value := os.getenv("UTA_CHECKLIST_FILE"):
+        config.paths.latest_checklist_file = value
+    if value := os.getenv("UTA_CHECKLIST_MD_FILE"):
+        config.paths.latest_checklist_markdown_file = value
+    if value := os.getenv("UTA_TESTCASES_FILE"):
+        config.paths.latest_testcases_file = value
+    if value := os.getenv("UTA_TESTCASES_MD_FILE"):
+        config.paths.latest_testcases_markdown_file = value
+    if value := os.getenv("UTA_BUG_TEMPLATE_FILE"):
+        config.paths.latest_bug_report_template_file = value
+    if value := os.getenv("UTA_GENERATED_ASSETS_INDEX_FILE"):
+        config.paths.latest_generated_assets_index_file = value
     if value := os.getenv("UTA_EVIDENCE_DIR"):
         config.paths.evidence_dir = value
     if value := os.getenv("UTA_TIMEOUT_WEB_MS"):
@@ -83,8 +104,15 @@ def load_runtime_config(config_path: str | Path | None = None) -> RuntimeConfig:
 
 def ensure_runtime_dirs(config: RuntimeConfig) -> None:
     Path(config.paths.results_dir).mkdir(parents=True, exist_ok=True)
+    Path(config.paths.runs_dir).mkdir(parents=True, exist_ok=True)
     Path(config.paths.evidence_dir).mkdir(parents=True, exist_ok=True)
     Path(config.paths.latest_result_file).parent.mkdir(parents=True, exist_ok=True)
     Path(config.paths.latest_plan_file).parent.mkdir(parents=True, exist_ok=True)
     Path(config.paths.latest_report_file).parent.mkdir(parents=True, exist_ok=True)
     Path(config.paths.latest_report_markdown_file).parent.mkdir(parents=True, exist_ok=True)
+    Path(config.paths.latest_checklist_file).parent.mkdir(parents=True, exist_ok=True)
+    Path(config.paths.latest_checklist_markdown_file).parent.mkdir(parents=True, exist_ok=True)
+    Path(config.paths.latest_testcases_file).parent.mkdir(parents=True, exist_ok=True)
+    Path(config.paths.latest_testcases_markdown_file).parent.mkdir(parents=True, exist_ok=True)
+    Path(config.paths.latest_bug_report_template_file).parent.mkdir(parents=True, exist_ok=True)
+    Path(config.paths.latest_generated_assets_index_file).parent.mkdir(parents=True, exist_ok=True)

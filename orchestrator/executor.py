@@ -13,6 +13,7 @@ from orchestrator.models import (
     ExecutionResult,
     NormalizedIntake,
     Recommendation,
+    RunMetadata,
     StrategyPlan,
     SummaryStats,
     defect_summary_from_details,
@@ -73,10 +74,14 @@ def execute_pipeline(
     product_type: str,
     strategy: StrategyPlan,
     adapter: BaseAdapter,
+    *,
+    run_id: str | None = None,
+    started_at: str | None = None,
+    run_metadata: RunMetadata | None = None,
 ) -> ExecutionEnvelope:
-    run_id = str(uuid4())
-    started_at = utc_now_iso()
-    finished_at = started_at
+    resolved_run_id = run_id or str(uuid4())
+    resolved_started_at = started_at or utc_now_iso()
+    finished_at = resolved_started_at
 
     execution = ExecutionResult(
         status="blocked",
@@ -85,19 +90,33 @@ def execute_pipeline(
     )
     metadata = {
         "manifest_path": intake.manifest_path,
+        "acceptance": intake.acceptance,
+        "outputs": intake.outputs,
         "strategy": strategy.model_dump(mode="json"),
     }
+    known_gaps: list[str] = []
+    assumptions: list[str] = []
+    generated_artifacts: list[str] = []
 
     try:
         discovery = adapter.discover(intake)
         adapter_plan = adapter.plan(intake, strategy)
         generated_assets = adapter.generate_assets(intake, adapter_plan)
+        generated_artifacts = list(generated_assets.artifacts)
         execution = adapter.execute(intake, generated_assets)
         collected = adapter.collect_evidence(intake, execution)
         execution.evidence = _merge_evidence(execution.evidence, collected)
         metadata["discovery"] = discovery.model_dump(mode="json")
         metadata["adapter_plan"] = adapter_plan.model_dump(mode="json")
         metadata["generated_assets"] = generated_assets.model_dump(mode="json")
+        if execution.summary.blocked > 0:
+            known_gaps.append("Some execution checks were blocked by unavailable dependencies or targets.")
+        assumptions.extend(
+            [
+                "Smoke execution mode focuses on quick confidence, not exhaustive validation.",
+                "Acceptance thresholds are evaluated during reporting policy gate.",
+            ]
+        )
     except Exception as exc:  # pragma: no cover - defensive fallback
         execution = ExecutionResult(
             status="error",
@@ -126,19 +145,24 @@ def execute_pipeline(
     )
 
     return ExecutionEnvelope(
-        run_id=run_id,
+        run_id=resolved_run_id,
         project_name=intake.name,
         project_type=product_type,
         adapter=adapter.name,
         status=status,
-        started_at=started_at,
+        started_at=resolved_started_at,
         finished_at=finished_at,
-        duration_seconds=_duration_seconds(started_at, finished_at),
+        duration_seconds=_duration_seconds(resolved_started_at, finished_at),
         summary=execution.summary,
         coverage=execution.coverage,
         defects=defects,
         evidence=execution.evidence,
         recommendation=recommendation,
+        policy=None,
+        run_metadata=run_metadata,
+        generated_artifacts=generated_artifacts,
+        known_gaps=known_gaps,
+        assumptions=assumptions,
         metadata=metadata,
         raw_output=execution.raw_output,
     )

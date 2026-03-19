@@ -36,5 +36,17 @@
   "recommendation": {
     "release_ready": false,
     "notes": []
-  }
+  },
+  "policy": {
+    "release_ready": false,
+    "verdict": "fail",
+    "reasons": [],
+    "evaluated_rules": {}
+  },
+  "release_gate_summary": "FAIL",
+  "known_gaps": [],
+  "assumptions": [],
+  "artifact_references": [],
+  "run_metadata": null,
+  "generated_at": ""
 }

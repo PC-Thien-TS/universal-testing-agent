@@ -125,6 +125,26 @@ class Recommendation(UtaModel):
     notes: list[str] = Field(default_factory=list)
 
 
+class PolicyEvaluation(UtaModel):
+    release_ready: bool = False
+    verdict: str = "fail"
+    reasons: list[str] = Field(default_factory=list)
+    evaluated_rules: dict[str, Any] = Field(default_factory=dict)
+
+
+class RunMetadata(UtaModel):
+    run_id: str
+    command: str
+    project_name: str
+    project_type: str
+    manifest_path: str
+    started_at: str
+    finished_at: str
+    duration_seconds: float
+    status: str
+    artifact_dir: str
+
+
 class ExecutionResult(UtaModel):
     status: Literal["passed", "failed", "blocked", "error"] = "blocked"
     summary: SummaryStats = Field(default_factory=SummaryStats)
@@ -149,6 +169,11 @@ class ExecutionEnvelope(UtaModel):
     defects: DefectSummary
     evidence: EvidenceBundle
     recommendation: Recommendation
+    policy: PolicyEvaluation | None = None
+    run_metadata: RunMetadata | None = None
+    generated_artifacts: list[str] = Field(default_factory=list)
+    known_gaps: list[str] = Field(default_factory=list)
+    assumptions: list[str] = Field(default_factory=list)
     metadata: dict[str, Any] = Field(default_factory=dict)
     raw_output: dict[str, Any] = Field(default_factory=dict)
 
@@ -167,6 +192,12 @@ class StandardReport(UtaModel):
     defects: DefectSummary
     evidence: EvidenceBundle
     recommendation: Recommendation
+    policy: PolicyEvaluation
+    release_gate_summary: str
+    known_gaps: list[str] = Field(default_factory=list)
+    assumptions: list[str] = Field(default_factory=list)
+    artifact_references: list[str] = Field(default_factory=list)
+    run_metadata: RunMetadata | None = None
     generated_at: str
 
 
