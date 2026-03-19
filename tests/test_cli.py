@@ -12,6 +12,7 @@ WEB_MANIFEST = PROJECT_ROOT / "manifests" / "samples" / "web_booking.yaml"
 API_MANIFEST = PROJECT_ROOT / "manifests" / "samples" / "api_verify_store.yaml"
 MODEL_MANIFEST = PROJECT_ROOT / "manifests" / "samples" / "model_basalt.yaml"
 RUNS_DIR = PROJECT_ROOT / "results" / "runs"
+HISTORY_DIR = PROJECT_ROOT / "results" / "history"
 
 
 def _run_cli(*args: str) -> subprocess.CompletedProcess[str]:
@@ -100,6 +101,8 @@ def test_run_for_web_api_model_and_report_with_policy() -> None:
     _assert_observability_payload(report_payload)
     assert json_report.exists()
     assert md_report.exists()
+    assert "history_record_file" in report_payload
+    assert Path(report_payload["history_record_file"]).exists()
 
     report_data = json.loads(json_report.read_text(encoding="utf-8"))
     assert "summary" in report_data
@@ -115,3 +118,29 @@ def test_runs_artifact_directory_is_created() -> None:
     _assert_observability_payload(payload)
     assert RUNS_DIR.exists()
     assert any(child.is_dir() for child in RUNS_DIR.iterdir())
+
+
+def test_history_trends_validate_contract_and_compare_commands() -> None:
+    run_payload = _assert_success(_run_cli("run", str(API_MANIFEST), "--output", "results/latest.json"))
+    _assert_observability_payload(run_payload)
+    assert "history_record_file" in run_payload
+    assert Path(run_payload["history_record_file"]).exists()
+    assert HISTORY_DIR.exists()
+
+    trends_payload = _assert_success(_run_cli("trends"))
+    _assert_observability_payload(trends_payload)
+    assert (PROJECT_ROOT / "results" / "trends_latest.json").exists()
+    assert (PROJECT_ROOT / "results" / "trends_latest.md").exists()
+    assert "trends" in trends_payload
+
+    contract_payload = _assert_success(_run_cli("validate-contract", str(API_MANIFEST)))
+    _assert_observability_payload(contract_payload)
+    assert (PROJECT_ROOT / "results" / "contract_validation_latest.json").exists()
+    assert (PROJECT_ROOT / "results" / "contract_validation_latest.md").exists()
+    assert "contract_validation" in contract_payload
+
+    compare_payload = _assert_success(_run_cli("compare", "results/latest.json", "results/latest.json"))
+    _assert_observability_payload(compare_payload)
+    assert (PROJECT_ROOT / "results" / "compare_latest.json").exists()
+    assert (PROJECT_ROOT / "results" / "compare_latest.md").exists()
+    assert "comparison" in compare_payload

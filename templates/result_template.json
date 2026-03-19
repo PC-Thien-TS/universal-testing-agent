@@ -42,6 +42,11 @@
   "generated_artifacts": [],
   "known_gaps": [],
   "assumptions": [],
+  "trend_summary": null,
+  "contract_validation_summary": null,
+  "comparison_summary": null,
+  "regression_signals": [],
+  "flaky_suspicion_note": null,
   "metadata": {},
   "raw_output": {}
 }

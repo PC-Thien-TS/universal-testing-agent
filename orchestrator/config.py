@@ -22,6 +22,14 @@ class PathSettings(BaseModel):
     latest_testcases_markdown_file: str = "results/testcases_latest.md"
     latest_bug_report_template_file: str = "results/bug_report_template.md"
     latest_generated_assets_index_file: str = "results/generated_assets_latest.json"
+    history_dir: str = "results/history"
+    history_index_file: str = "results/history/history_index.json"
+    latest_trends_file: str = "results/trends_latest.json"
+    latest_trends_markdown_file: str = "results/trends_latest.md"
+    latest_contract_validation_file: str = "results/contract_validation_latest.json"
+    latest_contract_validation_markdown_file: str = "results/contract_validation_latest.md"
+    latest_compare_file: str = "results/compare_latest.json"
+    latest_compare_markdown_file: str = "results/compare_latest.md"
 
 
 class TimeoutSettings(BaseModel):
@@ -90,6 +98,22 @@ def load_runtime_config(config_path: str | Path | None = None) -> RuntimeConfig:
         config.paths.latest_bug_report_template_file = value
     if value := os.getenv("UTA_GENERATED_ASSETS_INDEX_FILE"):
         config.paths.latest_generated_assets_index_file = value
+    if value := os.getenv("UTA_HISTORY_DIR"):
+        config.paths.history_dir = value
+    if value := os.getenv("UTA_HISTORY_INDEX_FILE"):
+        config.paths.history_index_file = value
+    if value := os.getenv("UTA_TRENDS_FILE"):
+        config.paths.latest_trends_file = value
+    if value := os.getenv("UTA_TRENDS_MD_FILE"):
+        config.paths.latest_trends_markdown_file = value
+    if value := os.getenv("UTA_CONTRACT_VALIDATION_FILE"):
+        config.paths.latest_contract_validation_file = value
+    if value := os.getenv("UTA_CONTRACT_VALIDATION_MD_FILE"):
+        config.paths.latest_contract_validation_markdown_file = value
+    if value := os.getenv("UTA_COMPARE_FILE"):
+        config.paths.latest_compare_file = value
+    if value := os.getenv("UTA_COMPARE_MD_FILE"):
+        config.paths.latest_compare_markdown_file = value
     if value := os.getenv("UTA_EVIDENCE_DIR"):
         config.paths.evidence_dir = value
     if value := os.getenv("UTA_TIMEOUT_WEB_MS"):
@@ -116,3 +140,11 @@ def ensure_runtime_dirs(config: RuntimeConfig) -> None:
     Path(config.paths.latest_testcases_markdown_file).parent.mkdir(parents=True, exist_ok=True)
     Path(config.paths.latest_bug_report_template_file).parent.mkdir(parents=True, exist_ok=True)
     Path(config.paths.latest_generated_assets_index_file).parent.mkdir(parents=True, exist_ok=True)
+    Path(config.paths.history_dir).mkdir(parents=True, exist_ok=True)
+    Path(config.paths.history_index_file).parent.mkdir(parents=True, exist_ok=True)
+    Path(config.paths.latest_trends_file).parent.mkdir(parents=True, exist_ok=True)
+    Path(config.paths.latest_trends_markdown_file).parent.mkdir(parents=True, exist_ok=True)
+    Path(config.paths.latest_contract_validation_file).parent.mkdir(parents=True, exist_ok=True)
+    Path(config.paths.latest_contract_validation_markdown_file).parent.mkdir(parents=True, exist_ok=True)
+    Path(config.paths.latest_compare_file).parent.mkdir(parents=True, exist_ok=True)
+    Path(config.paths.latest_compare_markdown_file).parent.mkdir(parents=True, exist_ok=True)
