@@ -84,6 +84,70 @@ def test_markdown_report_renders_sections() -> None:
     assert "## Capabilities Used" in markdown
     assert "## Taxonomy Coverage Focus" in markdown
     assert "## Fallback Execution Note" in markdown
+    assert "## Plugin Onboarding" in markdown
+    assert "## Support Level" in markdown
+    assert "## Coverage Catalog Reference" in markdown
     assert "## Trend Summary" in markdown
     assert "## Contract Validation Summary" in markdown
     assert "## Comparison Summary" in markdown
+
+
+def test_reporter_includes_plugin_metadata_from_envelope() -> None:
+    envelope = ExecutionEnvelope(
+        run_id="run-3",
+        project_name="llm-demo",
+        project_type="llm_app",
+        adapter="llm_app",
+        status="passed",
+        started_at="2026-01-01T00:00:00Z",
+        finished_at="2026-01-01T00:00:03Z",
+        duration_seconds=3.0,
+        summary=SummaryStats(total_checks=3, passed=3, failed=0, blocked=0, skipped=0),
+        coverage=CoverageStats(planned_cases=3, executed_cases=3, execution_rate=1.0, requirement_coverage=1.0),
+        defects=DefectSummary(),
+        evidence=EvidenceBundle(logs=["ok"], screenshots=[], traces=[], artifacts=[]),
+        recommendation=Recommendation(release_ready=True, notes=["ready"]),
+        plugin={
+            "plugin_name": "llm_app",
+            "plugin_version": "1.7.0",
+            "supported_product_types": ["llm_app"],
+            "supported_capabilities": ["reporting"],
+            "fallback_mode": "skeleton_smoke",
+            "adapter_target": "LlmAppAdapter",
+            "health_metadata": {"origin": "builtin"},
+            "discovered_from": "builtin",
+        },
+        plugin_validation={
+            "valid": True,
+            "errors": [],
+            "warnings": [],
+            "adapter_method_coverage": ["discover", "plan", "generate_assets", "execute", "collect_evidence"],
+            "capability_completeness": 1.0,
+            "missing_recommended_capabilities": [],
+            "support_level": "fallback_only",
+            "fallback_support_note": "skeleton",
+        },
+        plugin_onboarding={
+            "plugin_name": "llm_app",
+            "onboarding_status": "ready",
+            "completeness_score": 1.0,
+            "missing_items": [],
+            "notes": ["ok"],
+        },
+        support_level="fallback_only",
+        capability_path_used=["discovery", "reporting"],
+        policy=None,
+        run_metadata=None,
+        generated_artifacts=[],
+        known_gaps=[],
+        assumptions=[],
+        metadata={"coverage_catalog_reference": "results/coverage_catalog_latest.json"},
+        raw_output={},
+    )
+    report = generate_report(envelope)
+    assert report.plugin is not None
+    assert report.plugin.plugin_name == "llm_app"
+    assert report.plugin_validation is not None
+    assert report.plugin_onboarding is not None
+    assert report.support_level == "fallback_only"
+    assert report.capability_path_used == ["discovery", "reporting"]

@@ -114,6 +114,58 @@ Universal Testing Agent (`uta`) is a manifest-driven AI testing orchestrator for
   - new adapter behavior
   - CLI smoke flow for new manifests
 
+## v1.6 Release Highlights
+
+- Plugin-ready architecture:
+  - `orchestrator/plugins.py` defines typed adapter plugin metadata and inspection contracts.
+  - `orchestrator/plugin_loader.py` adds deterministic plugin discovery and validation.
+- Plugin-aware registry/router:
+  - built-in and optional local module plugins are supported.
+  - validation runs before plugin activation.
+  - duplicate/conflict handling is deterministic and introspectable.
+- Built-in adapter plugins:
+  - `web`, `api`, `model`, `mobile`, `llm_app`
+- New CLI introspection commands:
+  - `list-plugins`
+  - `inspect-plugin <plugin_name>`
+- Reports include plugin context:
+  - plugin name/version
+  - capability path used
+  - plugin validation summary
+  - fallback execution note
+- Extensibility direction prepared for future plugin types:
+  - `chatbot`, `rag_app`, `workflow`, `desktop_app`, `browser_extension`, `database`, `data_pipeline`
+
+## v1.7 Release Highlights
+
+- New built-in product plugins and adapters/runners:
+  - `rag_app`
+  - `workflow`
+  - `data_pipeline`
+- Added new sample manifests and offline-safe sample artifacts:
+  - `manifests/samples/rag_app_eval.yaml`
+  - `manifests/samples/workflow_smoke.yaml`
+  - `manifests/samples/data_pipeline_validation.yaml`
+- Taxonomy and planner expanded for new product types with meaningful defaults for:
+  - rag grounding/citation/hallucination risk
+  - workflow trigger/transition/recovery/idempotency
+  - data-pipeline schema/integrity/transformation/batch handling
+- Added plugin onboarding framework:
+  - `orchestrator/plugin_onboarding.py`
+  - completeness scoring and missing-item visibility per plugin
+- Added plugin scaffolding command:
+  - `uta scaffold-plugin <product_type> [--mode generic|llm_like|pipeline_like]`
+- Added capability/product coverage catalog:
+  - `uta coverage-catalog`
+  - outputs:
+    - `results/coverage_catalog_latest.json`
+    - `results/coverage_catalog_latest.md`
+- Plugin inspection and list outputs now include:
+  - support level (`full`, `partial`, `fallback_only`)
+  - missing recommended capabilities
+  - onboarding readiness summary
+- Reports now include plugin onboarding/support-level context and coverage catalog reference.
+
 ## Requirements
 
 - Python 3.11+
@@ -138,6 +190,16 @@ uta validate-contract manifests/samples/api_verify_store.yaml
 uta compare results/latest.json results/latest.json
 uta validate-manifest manifests/samples/mobile_app_smoke.yaml
 uta validate-manifest manifests/samples/llm_app_eval.yaml
+uta list-plugins
+uta inspect-plugin web
+uta inspect-plugin rag_app
+uta inspect-plugin workflow
+uta inspect-plugin data_pipeline
+uta plan manifests/samples/rag_app_eval.yaml
+uta generate-assets manifests/samples/workflow_smoke.yaml
+uta run manifests/samples/data_pipeline_validation.yaml
+uta coverage-catalog
+uta scaffold-plugin sample_custom_product
 ```
 
 ## Project Layout

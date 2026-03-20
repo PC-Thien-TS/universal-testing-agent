@@ -107,3 +107,57 @@ def test_llm_app_plan_includes_eval_dimensions() -> None:
     assert plan.evaluation_dimensions
     assert plan.metrics_to_compute
     assert plan.capability_expectations
+
+
+def test_rag_app_plan_includes_grounding_and_citation_dimensions() -> None:
+    intake = NormalizedIntake(
+        manifest_path="sample.yaml",
+        name="rag-app-sample",
+        project_type="rag_app",
+        request={"eval_cases": [{"prompt": "x"}], "require_citations": True, "tools": ["vector_search"]},
+        acceptance={},
+        outputs={},
+        auth={},
+        constraints=[],
+        api={},
+        model={},
+    )
+    plan = generate_test_strategy(intake, "rag_app")
+    assert any("grounding" in item.lower() for item in plan.evaluation_dimensions)
+    assert any("citation" in item.lower() for item in plan.evaluation_dimensions)
+
+
+def test_workflow_plan_includes_transitions_and_recovery_focus() -> None:
+    intake = NormalizedIntake(
+        manifest_path="sample.yaml",
+        name="workflow-sample",
+        project_type="workflow",
+        request={"steps": [{"id": "a"}], "transitions": [{"from": "a", "to": "b"}], "retry_policy": {"max": 1}},
+        acceptance={},
+        outputs={},
+        auth={},
+        constraints=[],
+        api={},
+        model={},
+    )
+    plan = generate_test_strategy(intake, "workflow")
+    assert "transition" in str(plan.coverage).lower()
+    assert any("idempotency" in item.lower() for item in plan.coverage_focus)
+
+
+def test_data_pipeline_plan_includes_schema_integrity_focus() -> None:
+    intake = NormalizedIntake(
+        manifest_path="sample.yaml",
+        name="pipeline-sample",
+        project_type="data_pipeline",
+        request={"expected_columns": ["id"], "transformations": ["normalize"]},
+        acceptance={},
+        outputs={},
+        auth={},
+        constraints=[],
+        api={},
+        model={},
+    )
+    plan = generate_test_strategy(intake, "data_pipeline")
+    assert "schema" in str(plan.coverage).lower()
+    assert any("integrity" in item.lower() for item in plan.coverage_focus)

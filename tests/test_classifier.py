@@ -66,3 +66,29 @@ def test_classifier_detects_llm_app_from_prompt_tool_hints() -> None:
         labels=["safe"],
     )
     assert classify_product(intake) == "llm_app"
+
+
+def test_classifier_detects_rag_app_from_retrieval_citation_hints() -> None:
+    intake = _intake(
+        project_type="auto",
+        request={"goal": "rag evaluation", "require_citations": True, "tools": ["vector_search"]},
+        artifacts=[Artifact(name="rag-corpus", type="corpus", path="rag_corpus.json")],
+    )
+    assert classify_product(intake) == "rag_app"
+
+
+def test_classifier_detects_workflow_from_trigger_transition_hints() -> None:
+    intake = _intake(
+        project_type="auto",
+        request={"trigger_payload": {"x": 1}, "transitions": [{"from": "a", "to": "b"}], "retry_policy": {"max": 1}},
+    )
+    assert classify_product(intake) == "workflow"
+
+
+def test_classifier_detects_data_pipeline_from_schema_batch_hints() -> None:
+    intake = _intake(
+        project_type="auto",
+        request={"expected_columns": ["id"], "transformations": ["normalize"]},
+        artifacts=[Artifact(name="schema", type="schema", path="schema.json"), Artifact(name="batch", type="batch", path="batch.json")],
+    )
+    assert classify_product(intake) == "data_pipeline"

@@ -154,6 +154,90 @@ def _llm_app_assets(intake: NormalizedIntake, strategy: StrategyPlan) -> tuple[l
     return checklist, testcases, known_gaps, assumptions
 
 
+def _rag_app_assets(intake: NormalizedIntake, strategy: StrategyPlan) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[str], list[str]]:
+    checklist = [
+        {"id": "RAG-CHK-001", "item": "Retrieval corpus is configured", "priority": "P0"},
+        {"id": "RAG-CHK-002", "item": "Citation expectation policy is defined", "priority": "P0"},
+        {"id": "RAG-CHK-003", "item": "Grounding/hallucination checks are configured", "priority": "P1"},
+        {"id": "RAG-CHK-004", "item": "Context/tool fallback strategy is declared", "priority": "P1"},
+    ]
+    testcases = [
+        {
+            "id": "RAG-TC-001",
+            "title": "Retrieval-grounded response smoke",
+            "type": "rag-grounding",
+            "steps": ["Execute eval prompts", "Verify expected answer token", "Verify context grounding signal"],
+            "expected": "Responses remain grounded to retrieval context",
+        },
+        {
+            "id": "RAG-TC-002",
+            "title": "Citation and fallback policy checks",
+            "type": "rag-citation",
+            "steps": ["Validate citation token expectations", "Validate fallback behavior for low confidence context"],
+            "expected": "Citation requirements and fallback behavior are satisfied",
+        },
+    ]
+    known_gaps = ["Live vector index latency and reranker quality checks are not auto-generated in v1.7."]
+    assumptions = [f"Coverage focus: {', '.join(strategy.coverage_focus) or 'rag_app defaults'}"]
+    return checklist, testcases, known_gaps, assumptions
+
+
+def _workflow_assets(intake: NormalizedIntake, strategy: StrategyPlan) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[str], list[str]]:
+    checklist = [
+        {"id": "WF-CHK-001", "item": "Trigger payload contract is defined", "priority": "P0"},
+        {"id": "WF-CHK-002", "item": "Step chain and transition definitions are present", "priority": "P0"},
+        {"id": "WF-CHK-003", "item": "Error recovery policy is configured", "priority": "P1"},
+        {"id": "WF-CHK-004", "item": "Idempotency baseline is declared", "priority": "P1"},
+    ]
+    testcases = [
+        {
+            "id": "WF-TC-001",
+            "title": "Trigger and step-chain validation",
+            "type": "workflow-chain",
+            "steps": ["Apply trigger payload", "Validate ordered step chain", "Capture transition traces"],
+            "expected": "Workflow chain initializes and transitions correctly",
+        },
+        {
+            "id": "WF-TC-002",
+            "title": "Recovery and idempotency smoke",
+            "type": "workflow-recovery",
+            "steps": ["Validate retry policy and error branch metadata", "Validate idempotency key handling"],
+            "expected": "Workflow can recover and avoid duplicate side effects in smoke mode",
+        },
+    ]
+    known_gaps = ["Distributed orchestration timing checks are not auto-generated in v1.7."]
+    assumptions = [f"Strategy priorities: {', '.join(strategy.execution_priorities) or 'workflow defaults'}"]
+    return checklist, testcases, known_gaps, assumptions
+
+
+def _data_pipeline_assets(intake: NormalizedIntake, strategy: StrategyPlan) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[str], list[str]]:
+    checklist = [
+        {"id": "DP-CHK-001", "item": "Schema and batch artifacts are configured", "priority": "P0"},
+        {"id": "DP-CHK-002", "item": "Expected column contract is defined", "priority": "P0"},
+        {"id": "DP-CHK-003", "item": "Transformation list is declared", "priority": "P1"},
+        {"id": "DP-CHK-004", "item": "Batch failure handling/logging expectations exist", "priority": "P1"},
+    ]
+    testcases = [
+        {
+            "id": "DP-TC-001",
+            "title": "Schema consistency smoke",
+            "type": "pipeline-schema",
+            "steps": ["Load schema artifact", "Validate expected columns", "Capture schema validation traces"],
+            "expected": "Schema contract remains consistent with expectations",
+        },
+        {
+            "id": "DP-TC-002",
+            "title": "Data integrity and transformation smoke",
+            "type": "pipeline-integrity",
+            "steps": ["Load sample batch", "Validate expected fields in records", "Validate transformation declarations"],
+            "expected": "Data integrity baseline is met and transformation chain is declared",
+        },
+    ]
+    known_gaps = ["Large-scale throughput and performance checks are not auto-generated in v1.7."]
+    assumptions = [f"Coverage focus: {', '.join(strategy.coverage_focus) or 'data_pipeline defaults'}"]
+    return checklist, testcases, known_gaps, assumptions
+
+
 def _render_checklist_markdown(project_type: str, checklist: list[dict[str, Any]]) -> str:
     lines = [f"# {project_type.upper()} Checklist", "", "| ID | Item | Priority |", "|---|---|---|"]
     for item in checklist:
@@ -220,6 +304,12 @@ def generate_assets(
         checklist, testcases, known_gaps, assumptions = _mobile_assets(intake, strategy)
     elif product_type == "llm_app":
         checklist, testcases, known_gaps, assumptions = _llm_app_assets(intake, strategy)
+    elif product_type == "rag_app":
+        checklist, testcases, known_gaps, assumptions = _rag_app_assets(intake, strategy)
+    elif product_type == "workflow":
+        checklist, testcases, known_gaps, assumptions = _workflow_assets(intake, strategy)
+    elif product_type == "data_pipeline":
+        checklist, testcases, known_gaps, assumptions = _data_pipeline_assets(intake, strategy)
     else:
         checklist, testcases, known_gaps, assumptions = _web_assets(intake, strategy)
 

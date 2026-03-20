@@ -148,6 +148,86 @@ def _build_llm_app_plan(intake: NormalizedIntake, taxonomy: TaxonomyProfile) -> 
     return StrategyPlan(**plan)
 
 
+def _build_rag_app_plan(intake: NormalizedIntake, taxonomy: TaxonomyProfile) -> StrategyPlan:
+    plan = _base_plan(intake, taxonomy)
+    eval_cases = intake.request.get("eval_cases") or []
+    tools = intake.request.get("tools") or []
+    plan["scope"].extend(
+        [
+            "Retrieval-grounded prompt/response quality checks",
+            "Citation and hallucination-risk smoke checks",
+            "Context/tool readiness and fallback handling checks",
+        ]
+    )
+    plan["coverage"].update(
+        {
+            "eval_case_count": len(eval_cases),
+            "tool_count": len(tools),
+            "retrieval_grounding": "smoke",
+            "citation_expectations": bool(intake.request.get("require_citations", False)),
+            "fallback": intake.request.get("fallback_strategy", "not_declared"),
+        }
+    )
+    plan["evaluation_dimensions"] = [
+        "prompt-response quality",
+        "retrieval grounding",
+        "hallucination risk",
+        "citation expectations",
+        "context/tool readiness",
+    ]
+    plan["metrics_to_compute"] = ["grounding_proxy", "citation_hit_ratio", "hallucination_risk_proxy"]
+    plan["threshold_risk_notes"] = [
+        "Ungrounded responses should fail rag_app release gate.",
+        "Missing citations on citation-required flows should fail smoke quality checks.",
+    ]
+    return StrategyPlan(**plan)
+
+
+def _build_workflow_plan(intake: NormalizedIntake, taxonomy: TaxonomyProfile) -> StrategyPlan:
+    plan = _base_plan(intake, taxonomy)
+    steps = intake.request.get("steps") or []
+    transitions = intake.request.get("transitions") or []
+    plan["scope"].extend(
+        [
+            "Trigger/input validation",
+            "Step chaining and state transition correctness",
+            "Error recovery and idempotency baseline checks",
+        ]
+    )
+    plan["coverage"].update(
+        {
+            "step_count": len(steps),
+            "transition_count": len(transitions),
+            "trigger_validation": "smoke",
+            "recovery_validation": "config-smoke",
+            "idempotency": "basic",
+        }
+    )
+    return StrategyPlan(**plan)
+
+
+def _build_data_pipeline_plan(intake: NormalizedIntake, taxonomy: TaxonomyProfile) -> StrategyPlan:
+    plan = _base_plan(intake, taxonomy)
+    expected_columns = intake.request.get("expected_columns") or []
+    transformations = intake.request.get("transformations") or []
+    plan["scope"].extend(
+        [
+            "Schema consistency and contract checks",
+            "Transformation correctness and data integrity checks",
+            "Batch success/failure handling and observability smoke checks",
+        ]
+    )
+    plan["coverage"].update(
+        {
+            "expected_columns": [str(item) for item in expected_columns] if isinstance(expected_columns, list) else [],
+            "transformations": [str(item) for item in transformations] if isinstance(transformations, list) else [],
+            "batch_handling": "smoke",
+            "observability": "log trace verification",
+        }
+    )
+    return StrategyPlan(**plan)
+
+
 def generate_test_strategy(intake: NormalizedIntake, product_type: str) -> StrategyPlan:
     normalized = (product_type or "").lower().strip()
     taxonomy = get_taxonomy_profile(normalized)
@@ -159,4 +239,10 @@ def generate_test_strategy(intake: NormalizedIntake, product_type: str) -> Strat
         return _build_mobile_plan(intake, taxonomy)
     if normalized == "llm_app":
         return _build_llm_app_plan(intake, taxonomy)
+    if normalized == "rag_app":
+        return _build_rag_app_plan(intake, taxonomy)
+    if normalized == "workflow":
+        return _build_workflow_plan(intake, taxonomy)
+    if normalized == "data_pipeline":
+        return _build_data_pipeline_plan(intake, taxonomy)
     return _build_web_plan(intake, taxonomy)

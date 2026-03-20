@@ -9,14 +9,24 @@ from orchestrator.asset_generator import generate_assets
 from orchestrator.classifier import classify_product
 from orchestrator.compare import compare_results, save_comparison
 from orchestrator.config import RuntimeConfig, ensure_runtime_dirs, load_runtime_config
+from orchestrator.coverage_catalog import build_coverage_catalog, save_coverage_catalog
 from orchestrator.contracts import save_contract_validation, validate_contracts
 from orchestrator.executor import execute_pipeline, load_execution_result, save_execution_result
 from orchestrator.history import load_history_records, persist_history_record, record_from_execution, record_from_report
 from orchestrator.intake import load_and_normalize, load_manifest
 from orchestrator.observability import RunObserver
 from orchestrator.planner import generate_test_strategy
+from orchestrator.plugin_onboarding import evaluate_plugin_onboarding, evaluate_registry_onboarding, scaffold_plugin
+from orchestrator.registry import get_registry
 from orchestrator.reporter import generate_report, save_markdown_report, save_report
-from orchestrator.router import adapter_capabilities, adapter_fallback_mode, adapter_fallback_note, select_adapter
+from orchestrator.router import (
+    adapter_capabilities,
+    adapter_fallback_mode,
+    adapter_fallback_note,
+    adapter_plugin_inspection,
+    select_adapter,
+)
+from orchestrator.models import PluginReportContext, PluginValidationSummary
 from orchestrator.trends import analyze_trends, save_trends
 
 
@@ -174,6 +184,10 @@ def handle_run(args: argparse.Namespace) -> int:
         capabilities = adapter_capabilities(product_type)
         fallback_mode = adapter_fallback_mode(product_type)
         fallback_note = adapter_fallback_note(product_type)
+        plugin_details = adapter_plugin_inspection(product_type)
+        registry = get_registry()
+        plugin_inspection = registry.inspection_for_product_type(product_type)
+        onboarding = evaluate_plugin_onboarding(plugin_inspection, project_root=".")
         observer.update_context(project_name=intake.name, project_type=product_type)
         observer.log(f"Executing adapter={adapter.name}.")
         envelope = execute_pipeline(
@@ -192,8 +206,28 @@ def handle_run(args: argparse.Namespace) -> int:
         envelope.metadata["capabilities_used"] = capabilities
         envelope.metadata["taxonomy_coverage_focus"] = strategy.coverage_focus
         envelope.metadata["adapter_registry_fallback_mode"] = fallback_mode
+        envelope.metadata["plugin_context"] = plugin_details
+        envelope.capability_path_used = capabilities
+        envelope.plugin = PluginReportContext.model_validate(
+            {
+                "plugin_name": plugin_details["plugin_name"],
+                "plugin_version": plugin_details["plugin_version"],
+                "supported_product_types": plugin_details["supported_product_types"],
+                "supported_capabilities": plugin_details["supported_capabilities"],
+                "fallback_mode": plugin_details["fallback_mode"],
+                "adapter_target": plugin_details["adapter_target"],
+                "health_metadata": plugin_details["health_metadata"],
+                "discovered_from": plugin_details["discovered_from"],
+            }
+        )
+        envelope.plugin_validation = PluginValidationSummary.model_validate(plugin_details["validation"])
+        envelope.plugin_onboarding = onboarding
+        envelope.support_level = plugin_inspection.validation.support_level
         if fallback_mode != "native" or fallback_note:
             envelope.metadata["fallback_execution_note"] = fallback_note or f"Adapter fallback mode active: {fallback_mode}"
+        envelope.metadata["plugin_onboarding"] = onboarding.model_dump(mode="json")
+        envelope.metadata["support_level"] = plugin_inspection.validation.support_level
+        envelope.metadata["coverage_catalog_reference"] = config.paths.latest_coverage_catalog_file
 
         result_path = _resolve_output_path(args.output, config.paths.latest_result_file)
         save_execution_result(envelope, result_path)
@@ -210,8 +244,12 @@ def handle_run(args: argparse.Namespace) -> int:
                 "history_record_file": history_record_path,
                 "summary": envelope.summary.model_dump(mode="json"),
                 "recommendation": envelope.recommendation.model_dump(mode="json"),
+                "plugin_used": plugin_details["plugin_name"],
+                "plugin_version": plugin_details["plugin_version"],
                 "capabilities": capabilities,
                 "fallback_mode": fallback_mode,
+                "support_level": plugin_inspection.validation.support_level,
+                "plugin_onboarding": onboarding.model_dump(mode="json"),
                 "run_id": run_metadata.run_id,
                 "artifact_dir": run_metadata.artifact_dir,
             }
@@ -258,6 +296,14 @@ def handle_report(args: argparse.Namespace) -> int:
                 "history_record_file": history_record_path,
                 "summary": report.summary.model_dump(mode="json"),
                 "policy": report.policy.model_dump(mode="json"),
+                "plugin": report.plugin.model_dump(mode="json") if report.plugin else None,
+                "plugin_validation": report.plugin_validation.model_dump(mode="json")
+                if report.plugin_validation
+                else None,
+                "plugin_onboarding": report.plugin_onboarding.model_dump(mode="json")
+                if report.plugin_onboarding
+                else None,
+                "support_level": report.support_level,
                 "run_id": run_metadata.run_id,
                 "artifact_dir": run_metadata.artifact_dir,
             }
@@ -395,6 +441,187 @@ def handle_compare(args: argparse.Namespace) -> int:
         return 1
 
 
+def handle_list_plugins(args: argparse.Namespace) -> int:
+    _ = args
+    config = load_runtime_config()
+    ensure_runtime_dirs(config)
+    observer = _observer(config, "list-plugins")
+    try:
+        registry = get_registry()
+        inspections = registry.list_plugins(include_invalid=True)
+        onboarding_results = {
+            item.plugin_name: item.model_dump(mode="json") for item in evaluate_registry_onboarding(inspections, project_root=".")
+        }
+        plugins = []
+        for inspection in inspections:
+            summary = inspection.summary()
+            summary["support_level"] = inspection.validation.support_level
+            summary["missing_recommended_capabilities"] = inspection.validation.missing_recommended_capabilities
+            summary["onboarding"] = onboarding_results.get(inspection.plugin.plugin_name)
+            plugins.append(summary)
+        capability_coverage = registry.capability_coverage_summary()
+        observer.log("Plugin list generated.")
+        run_metadata = observer.finalize(status="listed")
+        _print_json(
+            {
+                "status": "listed",
+                "plugins": plugins,
+                "supported_product_types": registry.supported_product_types(),
+                "capability_coverage_summary": capability_coverage,
+                "conflicts": registry.conflicts(),
+                "discovery_errors": registry.discovery_errors(),
+                "onboarding_summary": list(onboarding_results.values()),
+                "run_id": run_metadata.run_id,
+                "artifact_dir": run_metadata.artifact_dir,
+            }
+        )
+        return 0
+    except Exception as exc:
+        observer.log(f"list-plugins failed: {exc}")
+        run_metadata = observer.finalize(status="error")
+        _print_json(
+            {
+                "status": "error",
+                "error": str(exc),
+                "run_id": run_metadata.run_id,
+                "artifact_dir": run_metadata.artifact_dir,
+            }
+        )
+        return 1
+
+
+def handle_inspect_plugin(args: argparse.Namespace) -> int:
+    config = load_runtime_config()
+    ensure_runtime_dirs(config)
+    observer = _observer(config, "inspect-plugin")
+    try:
+        registry = get_registry()
+        inspection = registry.inspect_plugin(args.plugin_name)
+        if inspection is None:
+            observer.log(f"Plugin not found: {args.plugin_name}")
+            run_metadata = observer.finalize(status="not_found")
+            _print_json(
+                {
+                    "status": "not_found",
+                    "plugin_name": args.plugin_name,
+                    "run_id": run_metadata.run_id,
+                    "artifact_dir": run_metadata.artifact_dir,
+                }
+            )
+            return 1
+
+        observer.log(f"Plugin inspected: {args.plugin_name}")
+        onboarding = evaluate_plugin_onboarding(inspection, project_root=".")
+        run_metadata = observer.finalize(status="inspected")
+        _print_json(
+            {
+                "status": "inspected",
+                "plugin_name": inspection.plugin.plugin_name,
+                "plugin_version": inspection.plugin.plugin_version,
+                "supported_product_types": inspection.plugin.supported_product_types,
+                "supported_capabilities": inspection.plugin.supported_capabilities,
+                "fallback_mode": inspection.plugin.fallback_mode,
+                "adapter_target": inspection.plugin.adapter_target(),
+                "discovered_from": inspection.plugin.discovered_from,
+                "health_metadata": inspection.plugin.health_metadata,
+                "validation": inspection.validation.model_dump(mode="json"),
+                "onboarding": onboarding.model_dump(mode="json"),
+                "support_level": inspection.validation.support_level,
+                "run_id": run_metadata.run_id,
+                "artifact_dir": run_metadata.artifact_dir,
+            }
+        )
+        return 0
+    except Exception as exc:
+        observer.log(f"inspect-plugin failed: {exc}")
+        run_metadata = observer.finalize(status="error")
+        _print_json(
+            {
+                "status": "error",
+                "error": str(exc),
+                "run_id": run_metadata.run_id,
+                "artifact_dir": run_metadata.artifact_dir,
+            }
+        )
+        return 1
+
+
+def handle_coverage_catalog(args: argparse.Namespace) -> int:
+    _ = args
+    config = load_runtime_config()
+    ensure_runtime_dirs(config)
+    observer = _observer(config, "coverage-catalog")
+    try:
+        registry = get_registry()
+        catalog = build_coverage_catalog(registry, project_root=".")
+        json_path, md_path = save_coverage_catalog(
+            catalog,
+            config.paths.latest_coverage_catalog_file,
+            config.paths.latest_coverage_catalog_markdown_file,
+        )
+        observer.log("Coverage catalog generated.")
+        run_metadata = observer.finalize(status="generated")
+        _print_json(
+            {
+                "status": "generated",
+                "coverage_catalog_file": str(json_path),
+                "coverage_catalog_markdown_file": str(md_path),
+                "entries": [entry.model_dump(mode="json") for entry in catalog.entries],
+                "run_id": run_metadata.run_id,
+                "artifact_dir": run_metadata.artifact_dir,
+            }
+        )
+        return 0
+    except Exception as exc:
+        observer.log(f"coverage-catalog failed: {exc}")
+        run_metadata = observer.finalize(status="error")
+        _print_json(
+            {
+                "status": "error",
+                "error": str(exc),
+                "run_id": run_metadata.run_id,
+                "artifact_dir": run_metadata.artifact_dir,
+            }
+        )
+        return 1
+
+
+def handle_scaffold_plugin(args: argparse.Namespace) -> int:
+    config = load_runtime_config()
+    ensure_runtime_dirs(config)
+    observer = _observer(config, "scaffold-plugin")
+    try:
+        result = scaffold_plugin(args.product_type, mode=args.mode, project_root=".")
+        observer.log(f"Plugin scaffold generated for product_type={args.product_type}")
+        run_metadata = observer.finalize(status="scaffolded")
+        _print_json(
+            {
+                "status": "scaffolded",
+                "product_type": args.product_type,
+                "mode": args.mode,
+                "created_files": result["created_files"],
+                "skipped_files": result["skipped_files"],
+                "capability_template": result["capability_template"],
+                "run_id": run_metadata.run_id,
+                "artifact_dir": run_metadata.artifact_dir,
+            }
+        )
+        return 0
+    except Exception as exc:
+        observer.log(f"scaffold-plugin failed: {exc}")
+        run_metadata = observer.finalize(status="error")
+        _print_json(
+            {
+                "status": "error",
+                "product_type": args.product_type,
+                "error": str(exc),
+                "run_id": run_metadata.run_id,
+                "artifact_dir": run_metadata.artifact_dir,
+            }
+        )
+        return 1
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="uta", description="Universal Testing Agent CLI")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -435,6 +662,29 @@ def build_parser() -> argparse.ArgumentParser:
     compare_parser.add_argument("current_result", help="Path to current result JSON")
     compare_parser.add_argument("baseline_result", help="Path to baseline result JSON")
     compare_parser.set_defaults(handler=handle_compare)
+
+    list_plugins_parser = subparsers.add_parser("list-plugins", help="List available adapter plugins")
+    list_plugins_parser.set_defaults(handler=handle_list_plugins)
+
+    inspect_plugin_parser = subparsers.add_parser("inspect-plugin", help="Inspect a specific plugin")
+    inspect_plugin_parser.add_argument("plugin_name", help="Plugin name")
+    inspect_plugin_parser.set_defaults(handler=handle_inspect_plugin)
+
+    coverage_catalog_parser = subparsers.add_parser(
+        "coverage-catalog",
+        help="Generate plugin/product capability coverage catalog",
+    )
+    coverage_catalog_parser.set_defaults(handler=handle_coverage_catalog)
+
+    scaffold_plugin_parser = subparsers.add_parser("scaffold-plugin", help="Scaffold plugin files for a product type")
+    scaffold_plugin_parser.add_argument("product_type", help="Product type to scaffold")
+    scaffold_plugin_parser.add_argument(
+        "--mode",
+        choices=["generic", "llm_like", "pipeline_like"],
+        default="generic",
+        help="Scaffold mode template",
+    )
+    scaffold_plugin_parser.set_defaults(handler=handle_scaffold_plugin)
 
     return parser
 

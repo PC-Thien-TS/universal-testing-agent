@@ -12,6 +12,9 @@ from orchestrator.models import (
     ComparisonResult,
     ContractValidationResult,
     ExecutionEnvelope,
+    PluginOnboardingResult,
+    PluginReportContext,
+    PluginValidationSummary,
     StandardReport,
     TrendAnalysis,
     utc_now_iso,
@@ -44,6 +47,8 @@ def _existing_artifact_references(envelope: ExecutionEnvelope, config: RuntimeCo
         Path(config.paths.latest_trends_file),
         Path(config.paths.latest_contract_validation_file),
         Path(config.paths.latest_compare_file),
+        Path(config.paths.latest_coverage_catalog_file),
+        Path(config.paths.latest_coverage_catalog_markdown_file),
     ]
     for candidate in well_known:
         if candidate.exists():
@@ -87,10 +92,62 @@ def generate_report(envelope: ExecutionEnvelope, config: RuntimeConfig | None = 
 
     artifact_references = _existing_artifact_references(envelope, runtime_config)
     capabilities_used = [str(item) for item in envelope.metadata.get("capabilities_used", [])]
+    capability_path_used = list(envelope.capability_path_used or capabilities_used)
     taxonomy_coverage_focus = [str(item) for item in envelope.metadata.get("taxonomy_coverage_focus", [])]
     fallback_execution_note = envelope.metadata.get("fallback_execution_note")
     if not isinstance(fallback_execution_note, str):
         fallback_execution_note = None
+
+    plugin_context = envelope.plugin
+    if plugin_context is None:
+        raw_context = envelope.metadata.get("plugin_context")
+        if isinstance(raw_context, dict):
+            try:
+                plugin_context = PluginReportContext.model_validate(
+                    {
+                        "plugin_name": raw_context.get("plugin_name", ""),
+                        "plugin_version": raw_context.get("plugin_version", ""),
+                        "supported_product_types": raw_context.get("supported_product_types", []),
+                        "supported_capabilities": raw_context.get("supported_capabilities", []),
+                        "fallback_mode": raw_context.get("fallback_mode", "native"),
+                        "adapter_target": raw_context.get("adapter_target", ""),
+                        "health_metadata": raw_context.get("health_metadata", {}),
+                        "discovered_from": raw_context.get("discovered_from", "unknown"),
+                    }
+                )
+            except Exception:
+                plugin_context = None
+
+    plugin_validation = envelope.plugin_validation
+    if plugin_validation is None:
+        raw_plugin_context = envelope.metadata.get("plugin_context", {})
+        raw_validation = raw_plugin_context.get("validation", {}) if isinstance(raw_plugin_context, dict) else {}
+        if isinstance(raw_validation, dict) and raw_validation:
+            try:
+                plugin_validation = PluginValidationSummary.model_validate(raw_validation)
+            except Exception:
+                plugin_validation = None
+
+    plugin_onboarding = envelope.plugin_onboarding
+    if plugin_onboarding is None:
+        raw_onboarding = envelope.metadata.get("plugin_onboarding")
+        if isinstance(raw_onboarding, dict) and raw_onboarding:
+            try:
+                plugin_onboarding = PluginOnboardingResult.model_validate(raw_onboarding)
+            except Exception:
+                plugin_onboarding = None
+
+    support_level = envelope.support_level
+    if support_level is None and plugin_validation is not None:
+        support_level = plugin_validation.support_level
+    if support_level is None:
+        support_level = envelope.metadata.get("support_level")
+    if support_level is not None and not isinstance(support_level, str):
+        support_level = str(support_level)
+
+    coverage_catalog_reference = envelope.metadata.get("coverage_catalog_reference")
+    if coverage_catalog_reference is not None and not isinstance(coverage_catalog_reference, str):
+        coverage_catalog_reference = str(coverage_catalog_reference)
 
     regression_signals: list[str] = []
     if comparison_summary:
@@ -122,6 +179,12 @@ def generate_report(envelope: ExecutionEnvelope, config: RuntimeConfig | None = 
             "release_ready": envelope.recommendation.release_ready and policy.release_ready,
             "notes": recommendation_notes,
         },
+        plugin=plugin_context,
+        plugin_validation=plugin_validation,
+        plugin_onboarding=plugin_onboarding,
+        support_level=support_level,
+        coverage_catalog_reference=coverage_catalog_reference,
+        capability_path_used=capability_path_used,
         policy=policy,
         release_gate_summary="PASS" if policy.release_ready else "FAIL",
         known_gaps=known_gaps,
@@ -154,6 +217,37 @@ def _format_list(items: list[str]) -> str:
 
 
 def render_markdown_report(report: StandardReport) -> str:
+    plugin_section = "- (not available)"
+    if report.plugin is not None:
+        plugin_section = (
+            f"- Plugin: `{report.plugin.plugin_name}`\n"
+            f"- Version: `{report.plugin.plugin_version}`\n"
+            f"- Adapter Target: `{report.plugin.adapter_target}`\n"
+            f"- Fallback Mode: `{report.plugin.fallback_mode}`\n"
+            f"- Discovered From: `{report.plugin.discovered_from}`"
+        )
+
+    plugin_validation_section = "- (not available)"
+    if report.plugin_validation is not None:
+        plugin_validation_section = (
+            f"- Valid: `{report.plugin_validation.valid}`\n"
+            f"- Capability Completeness: `{report.plugin_validation.capability_completeness}`\n"
+            f"- Support Level: `{report.plugin_validation.support_level}`\n"
+            f"- Adapter Method Coverage: {', '.join(report.plugin_validation.adapter_method_coverage) if report.plugin_validation.adapter_method_coverage else '(none)'}\n"
+            f"- Missing Recommended Capabilities: {', '.join(report.plugin_validation.missing_recommended_capabilities) if report.plugin_validation.missing_recommended_capabilities else '(none)'}\n"
+            f"- Warnings: {', '.join(report.plugin_validation.warnings) if report.plugin_validation.warnings else '(none)'}\n"
+            f"- Errors: {', '.join(report.plugin_validation.errors) if report.plugin_validation.errors else '(none)'}"
+        )
+
+    onboarding_section = "- (not available)"
+    if report.plugin_onboarding is not None:
+        onboarding_section = (
+            f"- Status: `{report.plugin_onboarding.onboarding_status}`\n"
+            f"- Completeness Score: `{report.plugin_onboarding.completeness_score}`\n"
+            f"- Missing Items: {', '.join(report.plugin_onboarding.missing_items) if report.plugin_onboarding.missing_items else '(none)'}\n"
+            f"- Notes: {', '.join(report.plugin_onboarding.notes) if report.plugin_onboarding.notes else '(none)'}"
+        )
+
     trend_section = "- (not available)"
     if report.trend_summary is not None:
         trend_section = (
@@ -243,6 +337,24 @@ def render_markdown_report(report: StandardReport) -> str:
 
 ## Capabilities Used
 {_format_list(report.capabilities_used)}
+
+## Capability Path Used
+{_format_list(report.capability_path_used)}
+
+## Plugin Context
+{plugin_section}
+
+## Plugin Validation
+{plugin_validation_section}
+
+## Plugin Onboarding
+{onboarding_section}
+
+## Support Level
+- {report.support_level or "(none)"}
+
+## Coverage Catalog Reference
+- {report.coverage_catalog_reference or "(none)"}
 
 ## Taxonomy Coverage Focus
 {_format_list(report.taxonomy_coverage_focus)}

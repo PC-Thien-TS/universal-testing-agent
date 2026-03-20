@@ -5,6 +5,9 @@ def test_taxonomy_supports_new_product_types() -> None:
     supported = supported_taxonomy_product_types()
     assert "mobile" in supported
     assert "llm_app" in supported
+    assert "rag_app" in supported
+    assert "workflow" in supported
+    assert "data_pipeline" in supported
 
 
 def test_taxonomy_profile_contains_dimensions_risks_and_capabilities() -> None:

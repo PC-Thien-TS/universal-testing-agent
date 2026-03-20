@@ -37,6 +37,11 @@
     "release_ready": false,
     "notes": []
   },
+  "plugin": null,
+  "plugin_validation": null,
+  "plugin_onboarding": null,
+  "support_level": null,
+  "capability_path_used": [],
   "policy": null,
   "run_metadata": null,
   "generated_artifacts": [],

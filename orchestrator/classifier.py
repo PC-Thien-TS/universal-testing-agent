@@ -5,7 +5,7 @@ from orchestrator.models import NormalizedIntake
 
 def classify_product(intake: NormalizedIntake) -> str:
     explicit_type = (intake.project_type or "").lower()
-    if explicit_type in {"web", "api", "model", "mobile", "llm_app"}:
+    if explicit_type in {"web", "api", "model", "mobile", "llm_app", "rag_app", "workflow", "data_pipeline"}:
         return explicit_type
 
     artifact_signals = " ".join(
@@ -61,6 +61,36 @@ def classify_product(intake: NormalizedIntake) -> str:
         "guardrail",
         "chat",
     )
+    rag_app_indicators = (
+        "rag",
+        "retrieval",
+        "grounding",
+        "citation",
+        "context",
+        "vector",
+        "corpus",
+        "knowledge",
+    )
+    workflow_indicators = (
+        "workflow",
+        "trigger",
+        "step",
+        "transition",
+        "state",
+        "orchestration",
+        "idempotency",
+        "retry",
+    )
+    data_pipeline_indicators = (
+        "pipeline",
+        "schema",
+        "transform",
+        "batch",
+        "etl",
+        "integrity",
+        "dataset",
+        "table",
+    )
     web_indicators = ("url", "base_url", "feature", "auth", "booking", "page")
 
     def _score(indicators: tuple[str, ...]) -> int:
@@ -71,6 +101,9 @@ def classify_product(intake: NormalizedIntake) -> str:
         "model": _score(model_indicators),
         "mobile": _score(mobile_indicators),
         "llm_app": _score(llm_app_indicators),
+        "rag_app": _score(rag_app_indicators),
+        "workflow": _score(workflow_indicators),
+        "data_pipeline": _score(data_pipeline_indicators),
         "web": _score(web_indicators),
     }
 
@@ -83,6 +116,12 @@ def classify_product(intake: NormalizedIntake) -> str:
     # Favor mobile and llm_app when explicit platform/application hints exist.
     if scores["mobile"] >= 2:
         return "mobile"
+    if scores["rag_app"] >= 2 and scores["rag_app"] >= scores["llm_app"]:
+        return "rag_app"
+    if scores["workflow"] >= 2 and scores["workflow"] >= scores["web"]:
+        return "workflow"
+    if scores["data_pipeline"] >= 2 and scores["data_pipeline"] >= scores["api"]:
+        return "data_pipeline"
     if scores["llm_app"] >= 2 and scores["llm_app"] >= scores["model"]:
         return "llm_app"
     if scores["api"] >= 1 and scores["api"] >= scores["model"]:

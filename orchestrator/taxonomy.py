@@ -73,6 +73,27 @@ TAXONOMY_BY_PRODUCT: dict[str, TaxonomyProfile] = {
         priorities=["P0: safety + fallback checks", "P1: consistency checks", "P2: tool-use readiness smoke"],
         coverage_focus=["prompt-response quality", "safety policy checks", "tool/fallback behavior"],
     ),
+    "rag_app": _profile(
+        "rag_app",
+        dimensions=["prompt-response quality", "retrieval grounding", "citation quality", "context readiness", "safety"],
+        risks=["hallucination", "missing citations", "weak grounding", "context retrieval misses"],
+        priorities=["P0: retrieval grounding", "P0: citation checks", "P1: quality checks", "P2: tool/context readiness"],
+        coverage_focus=["grounded answer quality", "citation expectations", "retrieval context coverage"],
+    ),
+    "workflow": _profile(
+        "workflow",
+        dimensions=["trigger validation", "step chaining", "state transition correctness", "error recovery", "idempotency"],
+        risks=["broken step orchestration", "invalid transitions", "duplicate execution side effects", "recovery gaps"],
+        priorities=["P0: trigger + step chain", "P1: transition correctness", "P1: recovery/idempotency checks"],
+        coverage_focus=["trigger inputs", "state transitions", "recovery and idempotency baselines"],
+    ),
+    "data_pipeline": _profile(
+        "data_pipeline",
+        dimensions=["schema consistency", "transformation correctness", "data integrity", "batch handling", "observability"],
+        risks=["schema drift", "transformation regressions", "data loss", "batch failure handling gaps"],
+        priorities=["P0: schema and integrity", "P1: transformation checks", "P1: batch success/failure handling"],
+        coverage_focus=["schema contract", "integrity checks", "batch and logging smoke"],
+    ),
 }
 
 

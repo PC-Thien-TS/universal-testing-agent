@@ -23,7 +23,7 @@ properties:
         type: string
       type:
         type: string
-        enum: [web, api, model, mobile, llm_app, auto]
+        enum: [web, api, model, mobile, llm_app, rag_app, workflow, data_pipeline, auto]
       subtype:
         type: string
   interfaces:

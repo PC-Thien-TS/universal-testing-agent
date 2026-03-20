@@ -63,3 +63,28 @@ def test_generate_assets_supports_mobile_and_llm_app() -> None:
     )
     assert any(item["id"].startswith("MOB-") for item in mobile_bundle.checklist)
     assert any(item["id"].startswith("LLM-") for item in llm_bundle.checklist)
+
+
+def test_generate_assets_supports_rag_workflow_data_pipeline() -> None:
+    config = load_runtime_config()
+    rag_bundle = generate_assets(
+        _intake("rag_app"),
+        "rag_app",
+        StrategyPlan(coverage_focus=["grounding", "citation"]),
+        config,
+    )
+    workflow_bundle = generate_assets(
+        _intake("workflow"),
+        "workflow",
+        StrategyPlan(execution_priorities=["P0: trigger"]),
+        config,
+    )
+    pipeline_bundle = generate_assets(
+        _intake("data_pipeline"),
+        "data_pipeline",
+        StrategyPlan(coverage_focus=["schema", "integrity"]),
+        config,
+    )
+    assert any(item["id"].startswith("RAG-") for item in rag_bundle.checklist)
+    assert any(item["id"].startswith("WF-") for item in workflow_bundle.checklist)
+    assert any(item["id"].startswith("DP-") for item in pipeline_bundle.checklist)

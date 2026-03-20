@@ -21,7 +21,7 @@ properties:
     type: string
   project_type:
     type: string
-    enum: [web, api, model, mobile, llm_app]
+    enum: [web, api, model, mobile, llm_app, rag_app, workflow, data_pipeline]
   adapter:
     type: string
   status:
@@ -48,6 +48,20 @@ properties:
   recommendation:
     type: object
     required: [release_ready, notes]
+  plugin:
+    type: [object, "null"]
+  plugin_validation:
+    type: [object, "null"]
+  plugin_onboarding:
+    type: [object, "null"]
+  support_level:
+    type: [string, "null"]
+  coverage_catalog_reference:
+    type: [string, "null"]
+  capability_path_used:
+    type: array
+    items:
+      type: string
   policy:
     type: [object, "null"]
   run_metadata:

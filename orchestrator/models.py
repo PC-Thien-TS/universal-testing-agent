@@ -162,6 +162,54 @@ class RunMetadata(UtaModel):
     artifact_dir: str
 
 
+class PluginValidationSummary(UtaModel):
+    plugin_name: str | None = None
+    valid: bool = False
+    errors: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+    adapter_method_coverage: list[str] = Field(default_factory=list)
+    capability_completeness: float = 0.0
+    missing_recommended_capabilities: list[str] = Field(default_factory=list)
+    support_level: str = "partial"
+    fallback_support_note: str | None = None
+
+
+class PluginReportContext(UtaModel):
+    plugin_name: str
+    plugin_version: str
+    supported_product_types: list[str] = Field(default_factory=list)
+    supported_capabilities: list[str] = Field(default_factory=list)
+    fallback_mode: str = "native"
+    adapter_target: str
+    health_metadata: dict[str, Any] = Field(default_factory=dict)
+    discovered_from: str = "builtin"
+
+
+class PluginOnboardingResult(UtaModel):
+    plugin_name: str
+    onboarding_status: str = "partial"
+    completeness_score: float = 0.0
+    missing_items: list[str] = Field(default_factory=list)
+    notes: list[str] = Field(default_factory=list)
+
+
+class CoverageCatalogEntry(UtaModel):
+    plugin_name: str
+    plugin_version: str
+    product_types: list[str] = Field(default_factory=list)
+    capabilities: list[str] = Field(default_factory=list)
+    support_level: str = "partial"
+    fallback_mode: str = "native"
+    fallback_note: str | None = None
+    missing_recommended_capabilities: list[str] = Field(default_factory=list)
+    onboarding_status: str = "partial"
+
+
+class CoverageCatalogSummary(UtaModel):
+    generated_at: str
+    entries: list[CoverageCatalogEntry] = Field(default_factory=list)
+
+
 class HistoryRecord(UtaModel):
     run_id: str
     timestamp: str
@@ -227,6 +275,11 @@ class ExecutionEnvelope(UtaModel):
     defects: DefectSummary
     evidence: EvidenceBundle
     recommendation: Recommendation
+    plugin: PluginReportContext | None = None
+    plugin_validation: PluginValidationSummary | None = None
+    plugin_onboarding: PluginOnboardingResult | None = None
+    support_level: str | None = None
+    capability_path_used: list[str] = Field(default_factory=list)
     policy: PolicyEvaluation | None = None
     run_metadata: RunMetadata | None = None
     generated_artifacts: list[str] = Field(default_factory=list)
@@ -250,6 +303,12 @@ class StandardReport(UtaModel):
     defects: DefectSummary
     evidence: EvidenceBundle
     recommendation: Recommendation
+    plugin: PluginReportContext | None = None
+    plugin_validation: PluginValidationSummary | None = None
+    plugin_onboarding: PluginOnboardingResult | None = None
+    support_level: str | None = None
+    coverage_catalog_reference: str | None = None
+    capability_path_used: list[str] = Field(default_factory=list)
     policy: PolicyEvaluation
     release_gate_summary: str
     known_gaps: list[str] = Field(default_factory=list)

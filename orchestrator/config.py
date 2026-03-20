@@ -30,6 +30,8 @@ class PathSettings(BaseModel):
     latest_contract_validation_markdown_file: str = "results/contract_validation_latest.md"
     latest_compare_file: str = "results/compare_latest.json"
     latest_compare_markdown_file: str = "results/compare_latest.md"
+    latest_coverage_catalog_file: str = "results/coverage_catalog_latest.json"
+    latest_coverage_catalog_markdown_file: str = "results/coverage_catalog_latest.md"
 
 
 class TimeoutSettings(BaseModel):
@@ -114,6 +116,10 @@ def load_runtime_config(config_path: str | Path | None = None) -> RuntimeConfig:
         config.paths.latest_compare_file = value
     if value := os.getenv("UTA_COMPARE_MD_FILE"):
         config.paths.latest_compare_markdown_file = value
+    if value := os.getenv("UTA_COVERAGE_CATALOG_FILE"):
+        config.paths.latest_coverage_catalog_file = value
+    if value := os.getenv("UTA_COVERAGE_CATALOG_MD_FILE"):
+        config.paths.latest_coverage_catalog_markdown_file = value
     if value := os.getenv("UTA_EVIDENCE_DIR"):
         config.paths.evidence_dir = value
     if value := os.getenv("UTA_TIMEOUT_WEB_MS"):
@@ -148,3 +154,5 @@ def ensure_runtime_dirs(config: RuntimeConfig) -> None:
     Path(config.paths.latest_contract_validation_markdown_file).parent.mkdir(parents=True, exist_ok=True)
     Path(config.paths.latest_compare_file).parent.mkdir(parents=True, exist_ok=True)
     Path(config.paths.latest_compare_markdown_file).parent.mkdir(parents=True, exist_ok=True)
+    Path(config.paths.latest_coverage_catalog_file).parent.mkdir(parents=True, exist_ok=True)
+    Path(config.paths.latest_coverage_catalog_markdown_file).parent.mkdir(parents=True, exist_ok=True)

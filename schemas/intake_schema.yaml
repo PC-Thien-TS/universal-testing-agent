@@ -15,13 +15,13 @@ properties:
         type: string
       type:
         type: string
-        enum: [web, api, model, mobile, llm_app, auto]
+        enum: [web, api, model, mobile, llm_app, rag_app, workflow, data_pipeline, auto]
       subtype:
         type: string
   project_type:
     type: string
     description: Product type for routing adapters (legacy v1 key)
-    enum: [web, api, model, mobile, llm_app, auto]
+    enum: [web, api, model, mobile, llm_app, rag_app, workflow, data_pipeline, auto]
   project_subtype:
     type: [string, "null"]
   interfaces:

@@ -20,6 +20,8 @@ paths:
   latest_contract_validation_markdown_file: results/contract_validation_latest.md
   latest_compare_file: results/compare_latest.json
   latest_compare_markdown_file: results/compare_latest.md
+  latest_coverage_catalog_file: results/coverage_catalog_latest.json
+  latest_coverage_catalog_markdown_file: results/coverage_catalog_latest.md
 timeouts:
   web_ms: 8000
   api_s: 10
