@@ -21,6 +21,9 @@ class AdapterPlugin(BaseModel):
 
     plugin_name: str
     plugin_version: str
+    author: str = "UTA Team"
+    dependencies: list[str] = Field(default_factory=list)
+    compatibility: dict[str, Any] = Field(default_factory=dict)
     supported_product_types: list[str] = Field(default_factory=list)
     supported_capabilities: list[str] = Field(default_factory=list)
     adapter_class: type[BaseAdapter]
@@ -54,6 +57,9 @@ class PluginInspection(BaseModel):
         return {
             "plugin_name": self.plugin.plugin_name,
             "plugin_version": self.plugin.plugin_version,
+            "author": self.plugin.author,
+            "dependencies": self.plugin.dependencies,
+            "compatibility": self.plugin.compatibility,
             "product_types": self.plugin.supported_product_types,
             "capabilities": self.plugin.supported_capabilities,
             "fallback_mode": self.plugin.fallback_mode,
@@ -77,7 +83,10 @@ def _builtin_plugin(
         health_metadata["fallback_note"] = fallback_note
     return AdapterPlugin(
         plugin_name=name,
-        plugin_version="1.7.0",
+        plugin_version="1.8.0",
+        author="UTA Core Team",
+        dependencies=["requests>=2.31"],
+        compatibility={"python": ">=3.11,<3.13", "uta": ">=1.8.0"},
         supported_product_types=[product_type],
         supported_capabilities=capability_names(CORE_CAPABILITIES),
         adapter_class=adapter_class,
@@ -97,34 +106,34 @@ def get_builtin_adapter_plugins() -> list[AdapterPlugin]:
             MobileAdapter,
             "mobile",
             fallback_mode="skeleton_smoke",
-            fallback_note="Mobile plugin executes deterministic skeleton smoke checks in v1.7.",
+            fallback_note="Mobile plugin executes deterministic skeleton smoke checks in v1.8.",
         ),
         _builtin_plugin(
             "llm_app",
             LlmAppAdapter,
             "llm_app",
             fallback_mode="skeleton_smoke",
-            fallback_note="llm_app plugin executes deterministic skeleton evaluation in v1.7.",
+            fallback_note="llm_app plugin executes deterministic skeleton evaluation in v1.8.",
         ),
         _builtin_plugin(
             "rag_app",
             RagAppAdapter,
             "rag_app",
             fallback_mode="skeleton_smoke",
-            fallback_note="rag_app plugin executes deterministic retrieval smoke evaluation in v1.7.",
+            fallback_note="rag_app plugin executes deterministic retrieval smoke evaluation in v1.8.",
         ),
         _builtin_plugin(
             "workflow",
             WorkflowAdapter,
             "workflow",
             fallback_mode="skeleton_smoke",
-            fallback_note="workflow plugin executes deterministic orchestration smoke validation in v1.7.",
+            fallback_note="workflow plugin executes deterministic orchestration smoke validation in v1.8.",
         ),
         _builtin_plugin(
             "data_pipeline",
             DataPipelineAdapter,
             "data_pipeline",
             fallback_mode="skeleton_smoke",
-            fallback_note="data_pipeline plugin executes deterministic schema/integrity smoke validation in v1.7.",
+            fallback_note="data_pipeline plugin executes deterministic schema/integrity smoke validation in v1.8.",
         ),
     ]

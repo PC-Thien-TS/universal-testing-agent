@@ -1,4 +1,4 @@
-title: Coverage Catalog Schema v1.7
+title: Coverage Catalog Schema v1.8
 type: object
 required:
   - generated_at
@@ -13,6 +13,9 @@ properties:
       required:
         - plugin_name
         - plugin_version
+        - author
+        - dependencies
+        - compatibility
         - product_types
         - capabilities
         - support_level

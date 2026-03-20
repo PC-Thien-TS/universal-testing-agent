@@ -16,6 +16,9 @@ class PathSettings(BaseModel):
     latest_plan_file: str = "results/plan_latest.json"
     latest_report_file: str = "results/report_latest.json"
     latest_report_markdown_file: str = "results/report_latest.md"
+    latest_junit_file: str = "results/report_latest.junit.xml"
+    latest_ci_summary_file: str = "results/ci_summary_latest.json"
+    latest_quality_gates_file: str = "results/quality_gates_latest.json"
     latest_checklist_file: str = "results/checklist_latest.json"
     latest_checklist_markdown_file: str = "results/checklist_latest.md"
     latest_testcases_file: str = "results/testcases_latest.json"
@@ -32,6 +35,8 @@ class PathSettings(BaseModel):
     latest_compare_markdown_file: str = "results/compare_latest.md"
     latest_coverage_catalog_file: str = "results/coverage_catalog_latest.json"
     latest_coverage_catalog_markdown_file: str = "results/coverage_catalog_latest.md"
+    latest_plugin_packages_dir: str = "results/plugin_packages"
+    latest_imported_plugins_dir: str = "results/imported_plugins"
 
 
 class TimeoutSettings(BaseModel):
@@ -88,6 +93,12 @@ def load_runtime_config(config_path: str | Path | None = None) -> RuntimeConfig:
         config.paths.latest_report_file = value
     if value := os.getenv("UTA_REPORT_MD_FILE"):
         config.paths.latest_report_markdown_file = value
+    if value := os.getenv("UTA_JUNIT_FILE"):
+        config.paths.latest_junit_file = value
+    if value := os.getenv("UTA_CI_SUMMARY_FILE"):
+        config.paths.latest_ci_summary_file = value
+    if value := os.getenv("UTA_QUALITY_GATES_FILE"):
+        config.paths.latest_quality_gates_file = value
     if value := os.getenv("UTA_CHECKLIST_FILE"):
         config.paths.latest_checklist_file = value
     if value := os.getenv("UTA_CHECKLIST_MD_FILE"):
@@ -120,6 +131,10 @@ def load_runtime_config(config_path: str | Path | None = None) -> RuntimeConfig:
         config.paths.latest_coverage_catalog_file = value
     if value := os.getenv("UTA_COVERAGE_CATALOG_MD_FILE"):
         config.paths.latest_coverage_catalog_markdown_file = value
+    if value := os.getenv("UTA_PLUGIN_PACKAGES_DIR"):
+        config.paths.latest_plugin_packages_dir = value
+    if value := os.getenv("UTA_IMPORTED_PLUGINS_DIR"):
+        config.paths.latest_imported_plugins_dir = value
     if value := os.getenv("UTA_EVIDENCE_DIR"):
         config.paths.evidence_dir = value
     if value := os.getenv("UTA_TIMEOUT_WEB_MS"):
@@ -140,6 +155,9 @@ def ensure_runtime_dirs(config: RuntimeConfig) -> None:
     Path(config.paths.latest_plan_file).parent.mkdir(parents=True, exist_ok=True)
     Path(config.paths.latest_report_file).parent.mkdir(parents=True, exist_ok=True)
     Path(config.paths.latest_report_markdown_file).parent.mkdir(parents=True, exist_ok=True)
+    Path(config.paths.latest_junit_file).parent.mkdir(parents=True, exist_ok=True)
+    Path(config.paths.latest_ci_summary_file).parent.mkdir(parents=True, exist_ok=True)
+    Path(config.paths.latest_quality_gates_file).parent.mkdir(parents=True, exist_ok=True)
     Path(config.paths.latest_checklist_file).parent.mkdir(parents=True, exist_ok=True)
     Path(config.paths.latest_checklist_markdown_file).parent.mkdir(parents=True, exist_ok=True)
     Path(config.paths.latest_testcases_file).parent.mkdir(parents=True, exist_ok=True)
@@ -156,3 +174,5 @@ def ensure_runtime_dirs(config: RuntimeConfig) -> None:
     Path(config.paths.latest_compare_markdown_file).parent.mkdir(parents=True, exist_ok=True)
     Path(config.paths.latest_coverage_catalog_file).parent.mkdir(parents=True, exist_ok=True)
     Path(config.paths.latest_coverage_catalog_markdown_file).parent.mkdir(parents=True, exist_ok=True)
+    Path(config.paths.latest_plugin_packages_dir).mkdir(parents=True, exist_ok=True)
+    Path(config.paths.latest_imported_plugins_dir).mkdir(parents=True, exist_ok=True)

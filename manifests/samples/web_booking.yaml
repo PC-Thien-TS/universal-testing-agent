@@ -17,6 +17,11 @@ request:
   scenarios:
     - Open landing page
     - Open booking page
+  selectors:
+    - html
+  navigation_paths:
+    - /
+    - /booking
 acceptance:
   max_failed: 0
   coverage_threshold: 0.7

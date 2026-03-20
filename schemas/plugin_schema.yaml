@@ -1,10 +1,13 @@
-title: Plugin Inspection Schema v1.6
+title: Plugin Inspection Schema v1.8
 type: object
 required:
   - plugin_name
   - plugin_version
   - supported_product_types
   - supported_capabilities
+  - author
+  - dependencies
+  - compatibility
   - fallback_mode
   - adapter_target
   - validation
@@ -21,6 +24,14 @@ properties:
     type: array
     items:
       type: string
+  author:
+    type: string
+  dependencies:
+    type: array
+    items:
+      type: string
+  compatibility:
+    type: object
   fallback_mode:
     type: string
   adapter_target:

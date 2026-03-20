@@ -46,6 +46,9 @@ def test_plugin_validation_rejects_invalid_capability() -> None:
     plugin = AdapterPlugin(
         plugin_name="bad-plugin",
         plugin_version="0.0.1",
+        author="tester",
+        dependencies=[],
+        compatibility={"python": ">=3.11"},
         supported_product_types=["web"],
         supported_capabilities=["not_a_capability"],
         adapter_class=DummyAdapter,
@@ -62,6 +65,9 @@ def test_registry_duplicate_plugin_name_is_handled() -> None:
     plugin = AdapterPlugin(
         plugin_name="demo-plugin",
         plugin_version="1.0.0",
+        author="tester",
+        dependencies=[],
+        compatibility={"python": ">=3.11"},
         supported_product_types=["web"],
         supported_capabilities=[
             "discovery",

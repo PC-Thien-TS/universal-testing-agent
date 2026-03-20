@@ -35,7 +35,15 @@ def evaluate_plugin_onboarding(
     missing_items: list[str] = []
     notes: list[str] = []
 
-    metadata_ok = bool(plugin.plugin_name and plugin.plugin_version and plugin.supported_product_types)
+    metadata_ok = bool(
+        plugin.plugin_name
+        and plugin.plugin_version
+        and plugin.author
+        and plugin.supported_product_types
+        and isinstance(plugin.dependencies, list)
+        and isinstance(plugin.compatibility, dict)
+        and str(plugin.compatibility.get("python", "")).strip()
+    )
     if metadata_ok:
         checks_passed += 1
     else:

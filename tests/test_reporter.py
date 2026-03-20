@@ -81,7 +81,9 @@ def test_markdown_report_renders_sections() -> None:
     assert "## Execution Summary" in markdown
     assert "## Release Recommendation" in markdown
     assert "## Policy Evaluation" in markdown
+    assert "## Quality Gates" in markdown
     assert "## Capabilities Used" in markdown
+    assert "## Capability Coverage Summary" in markdown
     assert "## Taxonomy Coverage Focus" in markdown
     assert "## Fallback Execution Note" in markdown
     assert "## Plugin Onboarding" in markdown
@@ -109,7 +111,10 @@ def test_reporter_includes_plugin_metadata_from_envelope() -> None:
         recommendation=Recommendation(release_ready=True, notes=["ready"]),
         plugin={
             "plugin_name": "llm_app",
-            "plugin_version": "1.7.0",
+            "plugin_version": "1.8.0",
+            "author": "UTA Core Team",
+            "dependencies": ["requests>=2.31"],
+            "compatibility": {"python": ">=3.11,<3.13"},
             "supported_product_types": ["llm_app"],
             "supported_capabilities": ["reporting"],
             "fallback_mode": "skeleton_smoke",

@@ -17,8 +17,16 @@ from orchestrator.intake import load_and_normalize, load_manifest
 from orchestrator.observability import RunObserver
 from orchestrator.planner import generate_test_strategy
 from orchestrator.plugin_onboarding import evaluate_plugin_onboarding, evaluate_registry_onboarding, scaffold_plugin
+from orchestrator.plugin_packaging import export_plugin_package, import_plugin_package
+from orchestrator.quality_gates import evaluate_quality_gates
 from orchestrator.registry import get_registry
-from orchestrator.reporter import generate_report, save_markdown_report, save_report
+from orchestrator.reporter import (
+    generate_report,
+    save_ci_summary,
+    save_junit_report,
+    save_markdown_report,
+    save_report,
+)
 from orchestrator.router import (
     adapter_capabilities,
     adapter_fallback_mode,
@@ -38,6 +46,15 @@ def _resolve_output_path(explicit_path: str | None, default_path: str) -> Path:
 
 def _print_json(payload: dict[str, Any]) -> None:
     print(json.dumps(payload, indent=2))
+
+
+def _gate_exit_code(gate_status: str | None) -> int:
+    normalized = str(gate_status or "warning").lower()
+    if normalized == "pass":
+        return 0
+    if normalized == "fail":
+        return 2
+    return 1
 
 
 def _observer(config: RuntimeConfig, command: str, manifest_path: str = "") -> RunObserver:
@@ -212,6 +229,9 @@ def handle_run(args: argparse.Namespace) -> int:
             {
                 "plugin_name": plugin_details["plugin_name"],
                 "plugin_version": plugin_details["plugin_version"],
+                "author": plugin_details.get("author"),
+                "dependencies": plugin_details.get("dependencies", []),
+                "compatibility": plugin_details.get("compatibility", {}),
                 "supported_product_types": plugin_details["supported_product_types"],
                 "supported_capabilities": plugin_details["supported_capabilities"],
                 "fallback_mode": plugin_details["fallback_mode"],
@@ -228,6 +248,22 @@ def handle_run(args: argparse.Namespace) -> int:
         envelope.metadata["plugin_onboarding"] = onboarding.model_dump(mode="json")
         envelope.metadata["support_level"] = plugin_inspection.validation.support_level
         envelope.metadata["coverage_catalog_reference"] = config.paths.latest_coverage_catalog_file
+        contract_validation = validate_contracts(args.manifest, check_result_contract=False)
+        envelope.metadata["contract_validation_summary"] = contract_validation.model_dump(mode="json")
+        quality_gates = evaluate_quality_gates(
+            acceptance=envelope.metadata.get("acceptance", {}),
+            summary=envelope.summary,
+            coverage=envelope.coverage,
+            defects=envelope.defects,
+            contract_validation=contract_validation,
+            fallback_mode=fallback_mode,
+        )
+        envelope.quality_gates = quality_gates
+        envelope.metadata["quality_gates"] = quality_gates.model_dump(mode="json")
+        envelope.recommendation.release_ready = envelope.recommendation.release_ready and quality_gates.gate_status == "pass"
+        quality_gate_path = Path(config.paths.latest_quality_gates_file)
+        quality_gate_path.parent.mkdir(parents=True, exist_ok=True)
+        quality_gate_path.write_text(json.dumps(quality_gates.model_dump(mode="json"), indent=2), encoding="utf-8")
 
         result_path = _resolve_output_path(args.output, config.paths.latest_result_file)
         save_execution_result(envelope, result_path)
@@ -250,6 +286,7 @@ def handle_run(args: argparse.Namespace) -> int:
                 "fallback_mode": fallback_mode,
                 "support_level": plugin_inspection.validation.support_level,
                 "plugin_onboarding": onboarding.model_dump(mode="json"),
+                "quality_gates": quality_gates.model_dump(mode="json"),
                 "run_id": run_metadata.run_id,
                 "artifact_dir": run_metadata.artifact_dir,
             }
@@ -278,24 +315,45 @@ def handle_report(args: argparse.Namespace) -> int:
         envelope = load_execution_result(args.result_json)
         observer.update_context(project_name=envelope.project_name, project_type=envelope.project_type)
         report = generate_report(envelope, config=config)
-
-        report_path = _resolve_output_path(args.output, config.paths.latest_report_file)
+        format_name = str(args.format or "json").lower()
+        output_path = Path(args.output) if args.output else None
         markdown_path = _resolve_output_path(args.markdown_output, config.paths.latest_report_markdown_file)
-        save_report(report, report_path)
-        save_markdown_report(report, markdown_path)
+        report_path: Path | None = None
+        junit_path: Path | None = None
+        ci_path: Path | None = None
+        if format_name == "json":
+            report_path = output_path or Path(config.paths.latest_report_file)
+            save_report(report, report_path)
+            save_markdown_report(report, markdown_path)
+        elif format_name == "junit":
+            junit_path = output_path or Path(config.paths.latest_junit_file)
+            save_junit_report(report, junit_path)
+            # keep markdown sidecar for human debugging
+            save_markdown_report(report, markdown_path)
+        elif format_name == "ci":
+            ci_path = output_path or Path(config.paths.latest_ci_summary_file)
+            save_ci_summary(report, ci_path)
+            save_markdown_report(report, markdown_path)
+        else:
+            raise ValueError(f"Unsupported report format '{format_name}'.")
         observer.log("Report generation completed.")
         run_metadata = observer.finalize(status="reported")
         history_record_path = _persist_history_from_report(report, config)
+        gate_exit = _gate_exit_code(report.quality_gates.gate_status if report.quality_gates else None)
 
         _print_json(
             {
                 "status": "reported",
+                "format": format_name,
                 "source_result": args.result_json,
-                "report_file": str(report_path),
-                "markdown_report_file": str(markdown_path),
+                "report_file": str(report_path) if report_path else None,
+                "junit_file": str(junit_path) if junit_path else None,
+                "ci_summary_file": str(ci_path) if ci_path else None,
+                "markdown_report_file": str(markdown_path) if markdown_path else None,
                 "history_record_file": history_record_path,
                 "summary": report.summary.model_dump(mode="json"),
                 "policy": report.policy.model_dump(mode="json"),
+                "quality_gates": report.quality_gates.model_dump(mode="json") if report.quality_gates else None,
                 "plugin": report.plugin.model_dump(mode="json") if report.plugin else None,
                 "plugin_validation": report.plugin_validation.model_dump(mode="json")
                 if report.plugin_validation
@@ -304,11 +362,12 @@ def handle_report(args: argparse.Namespace) -> int:
                 if report.plugin_onboarding
                 else None,
                 "support_level": report.support_level,
+                "exit_code": gate_exit,
                 "run_id": run_metadata.run_id,
                 "artifact_dir": run_metadata.artifact_dir,
             }
         )
-        return 0
+        return gate_exit
     except Exception as exc:
         observer.log(f"Report command failed: {exc}")
         run_metadata = observer.finalize(status="error")
@@ -518,6 +577,9 @@ def handle_inspect_plugin(args: argparse.Namespace) -> int:
                 "status": "inspected",
                 "plugin_name": inspection.plugin.plugin_name,
                 "plugin_version": inspection.plugin.plugin_version,
+                "author": inspection.plugin.author,
+                "dependencies": inspection.plugin.dependencies,
+                "compatibility": inspection.plugin.compatibility,
                 "supported_product_types": inspection.plugin.supported_product_types,
                 "supported_capabilities": inspection.plugin.supported_capabilities,
                 "fallback_mode": inspection.plugin.fallback_mode,
@@ -622,6 +684,132 @@ def handle_scaffold_plugin(args: argparse.Namespace) -> int:
         return 1
 
 
+def handle_evaluate_gates(args: argparse.Namespace) -> int:
+    config = load_runtime_config()
+    ensure_runtime_dirs(config)
+    observer = _observer(config, "evaluate-gates", manifest_path=args.result_json)
+    try:
+        envelope = load_execution_result(args.result_json)
+        observer.update_context(project_name=envelope.project_name, project_type=envelope.project_type)
+        manifest_path = args.manifest or envelope.metadata.get("manifest_path")
+        contract_validation = None
+        if isinstance(manifest_path, str) and manifest_path.strip() and Path(manifest_path).exists():
+            contract_validation = validate_contracts(manifest_path, check_result_contract=False)
+
+        gates = evaluate_quality_gates(
+            acceptance=envelope.metadata.get("acceptance", {}),
+            summary=envelope.summary,
+            coverage=envelope.coverage,
+            defects=envelope.defects,
+            contract_validation=contract_validation,
+            fallback_mode=str(envelope.metadata.get("adapter_registry_fallback_mode", "native")),
+        )
+        gate_path = _resolve_output_path(args.output, config.paths.latest_quality_gates_file)
+        gate_path.parent.mkdir(parents=True, exist_ok=True)
+        gate_path.write_text(json.dumps(gates.model_dump(mode="json"), indent=2), encoding="utf-8")
+        observer.log("Quality gate evaluation completed.")
+        run_metadata = observer.finalize(status=gates.gate_status)
+        exit_code = _gate_exit_code(gates.gate_status)
+        _print_json(
+            {
+                "status": "evaluated",
+                "result_json": args.result_json,
+                "manifest": manifest_path,
+                "quality_gates_file": str(gate_path),
+                "quality_gates": gates.model_dump(mode="json"),
+                "exit_code": exit_code,
+                "run_id": run_metadata.run_id,
+                "artifact_dir": run_metadata.artifact_dir,
+            }
+        )
+        return exit_code
+    except Exception as exc:
+        observer.log(f"evaluate-gates failed: {exc}")
+        run_metadata = observer.finalize(status="error")
+        _print_json(
+            {
+                "status": "error",
+                "result_json": args.result_json,
+                "error": str(exc),
+                "run_id": run_metadata.run_id,
+                "artifact_dir": run_metadata.artifact_dir,
+            }
+        )
+        return 1
+
+
+def handle_export_plugin(args: argparse.Namespace) -> int:
+    config = load_runtime_config()
+    ensure_runtime_dirs(config)
+    observer = _observer(config, "export-plugin")
+    try:
+        registry = get_registry()
+        output = args.output or config.paths.latest_plugin_packages_dir
+        package_path, payload = export_plugin_package(registry, args.plugin_name, output)
+        observer.log(f"Plugin exported: {args.plugin_name}")
+        run_metadata = observer.finalize(status="exported")
+        _print_json(
+            {
+                "status": "exported",
+                "plugin_name": args.plugin_name,
+                "package_file": str(package_path),
+                "metadata": payload,
+                "run_id": run_metadata.run_id,
+                "artifact_dir": run_metadata.artifact_dir,
+            }
+        )
+        return 0
+    except Exception as exc:
+        observer.log(f"export-plugin failed: {exc}")
+        run_metadata = observer.finalize(status="error")
+        _print_json(
+            {
+                "status": "error",
+                "plugin_name": args.plugin_name,
+                "error": str(exc),
+                "run_id": run_metadata.run_id,
+                "artifact_dir": run_metadata.artifact_dir,
+            }
+        )
+        return 1
+
+
+def handle_import_plugin(args: argparse.Namespace) -> int:
+    config = load_runtime_config()
+    ensure_runtime_dirs(config)
+    observer = _observer(config, "import-plugin")
+    try:
+        import_dir = args.target_dir or config.paths.latest_imported_plugins_dir
+        import_path, payload, errors = import_plugin_package(args.path, import_dir)
+        observer.log(f"Plugin package imported from {args.path}")
+        run_metadata = observer.finalize(status="imported" if not errors else "import_warning")
+        _print_json(
+            {
+                "status": "imported" if not errors else "warning",
+                "source_package": args.path,
+                "import_file": str(import_path),
+                "import_errors": errors,
+                "metadata": payload,
+                "run_id": run_metadata.run_id,
+                "artifact_dir": run_metadata.artifact_dir,
+            }
+        )
+        return 0 if not errors else 1
+    except Exception as exc:
+        observer.log(f"import-plugin failed: {exc}")
+        run_metadata = observer.finalize(status="error")
+        _print_json(
+            {
+                "status": "error",
+                "source_package": args.path,
+                "error": str(exc),
+                "run_id": run_metadata.run_id,
+                "artifact_dir": run_metadata.artifact_dir,
+            }
+        )
+        return 1
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="uta", description="Universal Testing Agent CLI")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -648,6 +836,7 @@ def build_parser() -> argparse.ArgumentParser:
     report_parser.add_argument("result_json", help="Path to execution result JSON")
     report_parser.add_argument("--output", help="Output path for report JSON", default=None)
     report_parser.add_argument("--markdown-output", help="Output path for report Markdown", default=None)
+    report_parser.add_argument("--format", choices=["json", "junit", "ci"], default="json", help="Report output format")
     report_parser.set_defaults(handler=handle_report)
 
     trends_parser = subparsers.add_parser("trends", help="Analyze trend history and emit trend reports")
@@ -685,6 +874,22 @@ def build_parser() -> argparse.ArgumentParser:
         help="Scaffold mode template",
     )
     scaffold_plugin_parser.set_defaults(handler=handle_scaffold_plugin)
+
+    evaluate_gates_parser = subparsers.add_parser("evaluate-gates", help="Evaluate quality gates for a run result")
+    evaluate_gates_parser.add_argument("result_json", help="Path to execution result JSON")
+    evaluate_gates_parser.add_argument("--manifest", help="Optional manifest path override", default=None)
+    evaluate_gates_parser.add_argument("--output", help="Output path for quality gate JSON", default=None)
+    evaluate_gates_parser.set_defaults(handler=handle_evaluate_gates)
+
+    export_plugin_parser = subparsers.add_parser("export-plugin", help="Export plugin metadata package")
+    export_plugin_parser.add_argument("plugin_name", help="Plugin name")
+    export_plugin_parser.add_argument("--output", help="Output file or directory", default=None)
+    export_plugin_parser.set_defaults(handler=handle_export_plugin)
+
+    import_plugin_parser = subparsers.add_parser("import-plugin", help="Import plugin metadata package")
+    import_plugin_parser.add_argument("path", help="Path to exported plugin package JSON")
+    import_plugin_parser.add_argument("--target-dir", help="Target directory for imported package records", default=None)
+    import_plugin_parser.set_defaults(handler=handle_import_plugin)
 
     return parser
 

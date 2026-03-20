@@ -118,6 +118,9 @@ class CoverageStats(UtaModel):
 class DefectDetail(UtaModel):
     id: str
     severity: Literal["blocker", "critical", "high", "medium", "low"] = "medium"
+    category: Literal["functional", "contract", "performance", "data", "model"] = "functional"
+    reproducibility: Literal["deterministic", "flaky", "unknown"] = "deterministic"
+    confidence_score: float = 1.0
     message: str
     details: dict[str, Any] = Field(default_factory=dict)
 
@@ -149,6 +152,14 @@ class PolicyEvaluation(UtaModel):
     evaluated_rules: dict[str, Any] = Field(default_factory=dict)
 
 
+class QualityGateResult(UtaModel):
+    gate_status: Literal["pass", "fail", "warning"] = "warning"
+    gate_reasons: list[str] = Field(default_factory=list)
+    blocking_issues: list[str] = Field(default_factory=list)
+    recommendation: str = "Review quality gate findings."
+    evaluated_rules: dict[str, Any] = Field(default_factory=dict)
+
+
 class RunMetadata(UtaModel):
     run_id: str
     command: str
@@ -177,6 +188,9 @@ class PluginValidationSummary(UtaModel):
 class PluginReportContext(UtaModel):
     plugin_name: str
     plugin_version: str
+    author: str | None = None
+    dependencies: list[str] = Field(default_factory=list)
+    compatibility: dict[str, Any] = Field(default_factory=dict)
     supported_product_types: list[str] = Field(default_factory=list)
     supported_capabilities: list[str] = Field(default_factory=list)
     fallback_mode: str = "native"
@@ -196,6 +210,9 @@ class PluginOnboardingResult(UtaModel):
 class CoverageCatalogEntry(UtaModel):
     plugin_name: str
     plugin_version: str
+    author: str | None = None
+    dependencies: list[str] = Field(default_factory=list)
+    compatibility: dict[str, Any] = Field(default_factory=dict)
     product_types: list[str] = Field(default_factory=list)
     capabilities: list[str] = Field(default_factory=list)
     support_level: str = "partial"
@@ -273,6 +290,7 @@ class ExecutionEnvelope(UtaModel):
     summary: SummaryStats
     coverage: CoverageStats
     defects: DefectSummary
+    defect_details: list[DefectDetail] = Field(default_factory=list)
     evidence: EvidenceBundle
     recommendation: Recommendation
     plugin: PluginReportContext | None = None
@@ -281,6 +299,7 @@ class ExecutionEnvelope(UtaModel):
     support_level: str | None = None
     capability_path_used: list[str] = Field(default_factory=list)
     policy: PolicyEvaluation | None = None
+    quality_gates: QualityGateResult | None = None
     run_metadata: RunMetadata | None = None
     generated_artifacts: list[str] = Field(default_factory=list)
     known_gaps: list[str] = Field(default_factory=list)
@@ -301,6 +320,7 @@ class StandardReport(UtaModel):
     summary: SummaryStats
     coverage: CoverageStats
     defects: DefectSummary
+    defect_details: list[DefectDetail] = Field(default_factory=list)
     evidence: EvidenceBundle
     recommendation: Recommendation
     plugin: PluginReportContext | None = None
@@ -310,12 +330,14 @@ class StandardReport(UtaModel):
     coverage_catalog_reference: str | None = None
     capability_path_used: list[str] = Field(default_factory=list)
     policy: PolicyEvaluation
+    quality_gates: QualityGateResult | None = None
     release_gate_summary: str
     known_gaps: list[str] = Field(default_factory=list)
     assumptions: list[str] = Field(default_factory=list)
     artifact_references: list[str] = Field(default_factory=list)
     run_metadata: RunMetadata | None = None
     capabilities_used: list[str] = Field(default_factory=list)
+    capability_coverage_summary: dict[str, Any] = Field(default_factory=dict)
     taxonomy_coverage_focus: list[str] = Field(default_factory=list)
     fallback_execution_note: str | None = None
     trend_summary: TrendAnalysis | None = None

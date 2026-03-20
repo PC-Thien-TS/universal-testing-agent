@@ -166,6 +166,40 @@ Universal Testing Agent (`uta`) is a manifest-driven AI testing orchestrator for
   - onboarding readiness summary
 - Reports now include plugin onboarding/support-level context and coverage catalog reference.
 
+## v1.8 Release Highlights
+
+- Execution depth improvements across runners/adapters:
+  - `web`: page load, selector checks, navigation checks, optional Playwright probe with deterministic fallback
+  - `api`: status code validation, required-field checks, negative cases, auth simulation
+  - `model`: offline metrics (`accuracy`, `precision`, `recall`, `f1_score`) from local dataset samples
+  - `rag_app`: grounding/reference checks and rule-based hallucination risk detection
+  - `data_pipeline`: schema + consistency + batch completeness checks
+- Quality gates system:
+  - `orchestrator/quality_gates.py`
+  - rules supported: `max_critical_defects`, `max_failed_tests`, `minimum_coverage`, `contract_validation_required`, `fallback_not_allowed`
+  - gate output: `pass` / `warning` / `fail`, reasons, blocking issues, recommendation
+- Plugin packaging and metadata enforcement:
+  - plugin metadata now includes `author`, `dependencies`, `compatibility`
+  - semantic-version enforcement for plugin versions
+  - new commands:
+    - `uta export-plugin <plugin_name>`
+    - `uta import-plugin <path>`
+- CI/CD outputs:
+  - `uta report <result.json> --format junit` -> JUnit XML
+  - `uta report <result.json> --format ci` -> CI summary JSON
+  - `uta evaluate-gates <result.json>` -> explicit quality gate evaluation output
+  - exit codes:
+    - `0` pass
+    - `1` warning
+    - `2` fail
+- Defect standardization:
+  - defect details now include `severity`, `category`, `reproducibility`, `confidence_score`
+- Reporting improvements:
+  - quality gate section
+  - defect detail breakdown
+  - capability coverage summary
+  - plugin metadata/completeness context
+
 ## Requirements
 
 - Python 3.11+
@@ -185,6 +219,9 @@ uta plan manifests/samples/web_booking.yaml
 uta generate-assets manifests/samples/web_booking.yaml
 uta run manifests/samples/web_booking.yaml
 uta report results/latest.json
+uta report results/latest.json --format junit
+uta report results/latest.json --format ci
+uta evaluate-gates results/latest.json
 uta trends
 uta validate-contract manifests/samples/api_verify_store.yaml
 uta compare results/latest.json results/latest.json
@@ -200,6 +237,8 @@ uta generate-assets manifests/samples/workflow_smoke.yaml
 uta run manifests/samples/data_pipeline_validation.yaml
 uta coverage-catalog
 uta scaffold-plugin sample_custom_product
+uta export-plugin web
+uta import-plugin results/plugin_packages/web-1.8.0.json
 ```
 
 ## Project Layout

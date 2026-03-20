@@ -56,12 +56,14 @@ class DataPipelineAdapter(BaseAdapter):
 
         expected_columns = intake.request.get("expected_columns", [])
         transformations = intake.request.get("transformations", [])
+        expected_batch_size = intake.request.get("expected_batch_size")
         runner_result = run_data_pipeline_smoke(
             schema_path=schema_path,
             batch_path=batch_path,
             expected_columns=[str(item) for item in expected_columns] if isinstance(expected_columns, list) else [],
             transformations=[str(item) for item in transformations] if isinstance(transformations, list) else [],
             evidence_dir=self.config.paths.evidence_dir,
+            expected_batch_size=int(expected_batch_size) if expected_batch_size is not None else None,
         )
         return ExecutionResult(
             status=runner_result.get("status", "failed"),

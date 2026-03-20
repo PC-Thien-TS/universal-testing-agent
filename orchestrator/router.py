@@ -36,6 +36,9 @@ def adapter_plugin_inspection(product_type: str) -> dict[str, Any]:
     return {
         "plugin_name": inspection.plugin.plugin_name,
         "plugin_version": inspection.plugin.plugin_version,
+        "author": inspection.plugin.author,
+        "dependencies": inspection.plugin.dependencies,
+        "compatibility": inspection.plugin.compatibility,
         "supported_product_types": inspection.plugin.supported_product_types,
         "supported_capabilities": inspection.plugin.supported_capabilities,
         "fallback_mode": inspection.plugin.fallback_mode,

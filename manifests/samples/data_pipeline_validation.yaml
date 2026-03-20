@@ -28,6 +28,7 @@ request:
     - event_type
     - created_at
     - amount
+  expected_batch_size: 2
   transformations:
     - normalize_amount
     - parse_timestamp

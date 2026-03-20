@@ -22,8 +22,10 @@ REQUIRED_RESULT_FIELDS = {
     "summary",
     "coverage",
     "defects",
+    "defect_details",
     "evidence",
     "recommendation",
+    "quality_gates",
 }
 
 
@@ -117,7 +119,12 @@ def _validate_data_pipeline_contract(manifest: Any) -> tuple[bool, str]:
     return False, "data_pipeline contract missing schema or batch signals"
 
 
-def validate_contracts(manifest_path: str | Path, result_path: str | Path | None = None) -> ContractValidationResult:
+def validate_contracts(
+    manifest_path: str | Path,
+    result_path: str | Path | None = None,
+    *,
+    check_result_contract: bool = True,
+) -> ContractValidationResult:
     manifest = load_manifest(manifest_path)
     checks: dict[str, dict[str, Any]] = {}
     reasons: list[str] = []
@@ -172,7 +179,9 @@ def validate_contracts(manifest_path: str | Path, result_path: str | Path | None
             reasons.append("Missing URL/base_url/feature indicators")
 
     resolved_result_path = Path(result_path) if result_path else Path("results/latest.json")
-    if resolved_result_path.exists():
+    if not check_result_contract:
+        checks["result_contract_basics"] = {"passed": True, "details": "Runtime result contract check skipped"}
+    elif resolved_result_path.exists():
         try:
             result_payload = json.loads(resolved_result_path.read_text(encoding="utf-8"))
             missing = sorted(REQUIRED_RESULT_FIELDS - set(result_payload.keys()))

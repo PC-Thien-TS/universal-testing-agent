@@ -27,6 +27,7 @@
     "medium": 0,
     "low": 0
   },
+  "defect_details": [],
   "evidence": {
     "logs": [],
     "screenshots": [],
@@ -49,12 +50,14 @@
     "reasons": [],
     "evaluated_rules": {}
   },
+  "quality_gates": null,
   "release_gate_summary": "FAIL",
   "known_gaps": [],
   "assumptions": [],
   "artifact_references": [],
   "run_metadata": null,
   "capabilities_used": [],
+  "capability_coverage_summary": {},
   "taxonomy_coverage_focus": [],
   "fallback_execution_note": null,
   "trend_summary": null,

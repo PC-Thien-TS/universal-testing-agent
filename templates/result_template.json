@@ -27,6 +27,7 @@
     "medium": 0,
     "low": 0
   },
+  "defect_details": [],
   "evidence": {
     "logs": [],
     "screenshots": [],
@@ -43,6 +44,7 @@
   "support_level": null,
   "capability_path_used": [],
   "policy": null,
+  "quality_gates": null,
   "run_metadata": null,
   "generated_artifacts": [],
   "known_gaps": [],

@@ -54,6 +54,8 @@ def test_inspect_plugin_command_for_web_llm_and_new_plugins() -> None:
     assert rag_payload["plugin_name"] == "rag_app"
     assert workflow_payload["plugin_name"] == "workflow"
     assert pipeline_payload["plugin_name"] == "data_pipeline"
+    assert "author" in web_payload
+    assert "compatibility" in llm_payload
     assert "validation" in web_payload
     assert "validation" in llm_payload
     assert "onboarding" in rag_payload

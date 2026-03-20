@@ -27,6 +27,7 @@ request:
     - prompt: "What is the refund window?"
       expected_contains: "30 days"
       expected_citation: "policy/refund"
+      expected_reference: "policy/refund"
       mock_response: "The refund window is 30 days [policy/refund]."
       context_hit: true
 acceptance:

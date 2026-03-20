@@ -213,3 +213,48 @@ def test_history_trends_validate_contract_and_compare_commands() -> None:
     assert (PROJECT_ROOT / "results" / "compare_latest.json").exists()
     assert (PROJECT_ROOT / "results" / "compare_latest.md").exists()
     assert "comparison" in compare_payload
+
+
+def test_report_supports_junit_and_ci_formats_with_gate_exit_codes() -> None:
+    model_result = PROJECT_ROOT / "results" / "run_model_for_ci.json"
+    run_payload = _assert_success(_run_cli("run", str(MODEL_MANIFEST), "--output", str(model_result)))
+    _assert_observability_payload(run_payload)
+    assert model_result.exists()
+
+    junit_proc = _run_cli("report", str(model_result), "--format", "junit")
+    assert junit_proc.returncode in {0, 1, 2}, junit_proc.stdout + junit_proc.stderr
+    junit_payload = json.loads(junit_proc.stdout)
+    assert junit_payload["format"] == "junit"
+    assert junit_payload.get("junit_file")
+    assert Path(junit_payload["junit_file"]).exists()
+
+    ci_proc = _run_cli("report", str(model_result), "--format", "ci")
+    assert ci_proc.returncode in {0, 1, 2}, ci_proc.stdout + ci_proc.stderr
+    ci_payload = json.loads(ci_proc.stdout)
+    assert ci_payload["format"] == "ci"
+    assert ci_payload.get("ci_summary_file")
+    assert Path(ci_payload["ci_summary_file"]).exists()
+
+
+def test_evaluate_gates_and_plugin_packaging_commands() -> None:
+    run_payload = _assert_success(_run_cli("run", str(RAG_MANIFEST), "--output", "results/run_rag_for_gates.json"))
+    _assert_observability_payload(run_payload)
+    result_path = Path("results/run_rag_for_gates.json")
+    assert result_path.exists()
+
+    gates_proc = _run_cli("evaluate-gates", str(result_path), "--manifest", str(RAG_MANIFEST))
+    assert gates_proc.returncode in {0, 1, 2}, gates_proc.stdout + gates_proc.stderr
+    gates_payload = json.loads(gates_proc.stdout)
+    assert gates_payload["status"] == "evaluated"
+    assert Path(gates_payload["quality_gates_file"]).exists()
+
+    export_proc = _run_cli("export-plugin", "rag_app")
+    assert export_proc.returncode == 0, export_proc.stdout + export_proc.stderr
+    export_payload = json.loads(export_proc.stdout)
+    package_file = Path(export_payload["package_file"])
+    assert package_file.exists()
+
+    import_proc = _run_cli("import-plugin", str(package_file))
+    assert import_proc.returncode == 0, import_proc.stdout + import_proc.stderr
+    import_payload = json.loads(import_proc.stdout)
+    assert import_payload["status"] in {"imported", "warning"}

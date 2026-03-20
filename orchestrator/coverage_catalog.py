@@ -19,6 +19,9 @@ def build_coverage_catalog(registry: PluginAwareRegistry, project_root: str | Pa
             CoverageCatalogEntry(
                 plugin_name=inspection.plugin.plugin_name,
                 plugin_version=inspection.plugin.plugin_version,
+                author=inspection.plugin.author,
+                dependencies=inspection.plugin.dependencies,
+                compatibility=inspection.plugin.compatibility,
                 product_types=inspection.plugin.supported_product_types,
                 capabilities=inspection.plugin.supported_capabilities,
                 support_level=inspection.validation.support_level,
@@ -38,14 +41,15 @@ def render_coverage_catalog_markdown(catalog: CoverageCatalogSummary) -> str:
         "",
         f"- Generated At: `{catalog.generated_at}`",
         "",
-        "| Plugin | Version | Product Types | Support Level | Fallback | Missing Capabilities | Onboarding |",
-        "|---|---|---|---|---|---|---|",
+        "| Plugin | Version | Author | Product Types | Support Level | Fallback | Missing Capabilities | Onboarding |",
+        "|---|---|---|---|---|---|---|---|",
     ]
     for entry in catalog.entries:
         lines.append(
-            "| {plugin} | {version} | {types} | {support} | {fallback} | {missing} | {onboarding} |".format(
+            "| {plugin} | {version} | {author} | {types} | {support} | {fallback} | {missing} | {onboarding} |".format(
                 plugin=entry.plugin_name,
                 version=entry.plugin_version,
+                author=entry.author or "unknown",
                 types=", ".join(entry.product_types) or "(none)",
                 support=entry.support_level,
                 fallback=entry.fallback_mode,

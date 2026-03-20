@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib
 import os
+import re
 from typing import Any
 
 from adapters.base import BaseAdapter
@@ -26,6 +27,7 @@ VALID_PRODUCT_TYPES: set[str] = {
 
 VALID_FALLBACK_MODES: set[str] = {"native", "skeleton_smoke", "simulated", "deferred", "disabled"}
 REQUIRED_ADAPTER_METHODS: tuple[str, ...] = ("discover", "plan", "generate_assets", "execute", "collect_evidence")
+SEMVER_PATTERN = re.compile(r"^\d+\.\d+\.\d+$")
 
 
 def _normalize_module_paths(module_paths: list[str] | None = None) -> list[str]:
@@ -98,6 +100,18 @@ def validate_plugin(plugin: AdapterPlugin) -> PluginValidationResult:
         errors.append("supported_product_types must not be empty.")
     if not plugin.supported_capabilities:
         errors.append("supported_capabilities must not be empty.")
+    if not SEMVER_PATTERN.match(plugin.plugin_version):
+        errors.append("plugin_version must follow semantic versioning (e.g. 1.8.0).")
+    if not plugin.author.strip():
+        errors.append("author is required.")
+    if not isinstance(plugin.dependencies, list):
+        errors.append("dependencies must be a list of package specifiers.")
+    if not isinstance(plugin.compatibility, dict):
+        errors.append("compatibility must be a dictionary.")
+    elif "python" not in plugin.compatibility:
+        warnings.append("compatibility.python is not declared.")
+    elif not str(plugin.compatibility.get("python", "")).strip():
+        errors.append("compatibility.python must not be empty.")
 
     invalid_product_types = sorted(set(plugin.supported_product_types) - VALID_PRODUCT_TYPES)
     if invalid_product_types:

@@ -5,8 +5,25 @@ from pathlib import Path
 from typing import Any
 
 
-def _defect(defect_id: str, severity: str, message: str, **details: Any) -> dict[str, Any]:
-    return {"id": defect_id, "severity": severity, "message": message, "details": details}
+def _defect(
+    defect_id: str,
+    severity: str,
+    message: str,
+    *,
+    category: str = "data",
+    reproducibility: str = "deterministic",
+    confidence_score: float = 0.95,
+    **details: Any,
+) -> dict[str, Any]:
+    return {
+        "id": defect_id,
+        "severity": severity,
+        "category": category,
+        "reproducibility": reproducibility,
+        "confidence_score": confidence_score,
+        "message": message,
+        "details": details,
+    }
 
 
 def _safe_execution_rate(executed_cases: int, planned_cases: int) -> float:
@@ -33,11 +50,12 @@ def run_data_pipeline_smoke(
     expected_columns: list[str],
     transformations: list[str],
     evidence_dir: str,
+    expected_batch_size: int | None = None,
 ) -> dict[str, Any]:
     logs: list[str] = []
     defects: list[dict[str, Any]] = []
 
-    planned_cases = 5
+    planned_cases = 6
     passed = 0
     failed = 0
     blocked = 0
@@ -59,7 +77,14 @@ def run_data_pipeline_smoke(
         logs.append(f"Schema columns loaded: {', '.join(schema_columns)}")
     else:
         blocked += 1
-        defects.append(_defect("pipeline.schema_missing", "high", "Schema definition missing or invalid."))
+        defects.append(
+            _defect(
+                "pipeline.schema_missing",
+                "critical",
+                "Schema definition missing or invalid.",
+                category="contract",
+            )
+        )
 
     records: list[dict[str, Any]] = []
     if isinstance(batch_payload, list):
@@ -69,7 +94,14 @@ def run_data_pipeline_smoke(
         logs.append(f"Batch records loaded: {len(records)}")
     else:
         blocked += 1
-        defects.append(_defect("pipeline.batch_missing", "high", "Batch payload missing or invalid."))
+        defects.append(
+            _defect(
+                "pipeline.batch_missing",
+                "critical",
+                "Batch payload missing or invalid.",
+                category="data",
+            )
+        )
 
     if expected_columns:
         missing_columns = [column for column in expected_columns if column not in schema_columns]
@@ -80,6 +112,7 @@ def run_data_pipeline_smoke(
                     "pipeline.schema_mismatch",
                     "high",
                     "Expected columns missing from schema.",
+                    category="contract",
                     missing_columns=missing_columns,
                 )
             )
@@ -88,31 +121,88 @@ def run_data_pipeline_smoke(
             logs.append("Schema consistency check passed.")
     else:
         skipped += 1
-        logs.append("Expected columns not provided; schema consistency strict check skipped.")
+        logs.append("Expected columns not provided; strict schema check skipped.")
 
     if records and expected_columns:
-        sample_record = records[0]
-        missing_in_record = [column for column in expected_columns if column not in sample_record]
-        if missing_in_record:
+        missing_in_any = [
+            column
+            for column in expected_columns
+            if any(column not in record for record in records)
+        ]
+        if missing_in_any:
             failed += 1
             defects.append(
                 _defect(
                     "pipeline.integrity_mismatch",
-                    "medium",
-                    "Expected columns missing from sample batch record.",
-                    missing_columns=missing_in_record,
+                    "high",
+                    "Expected columns missing in one or more batch records.",
+                    category="data",
+                    missing_columns=sorted(set(missing_in_any)),
                 )
             )
         else:
             passed += 1
-            logs.append("Data integrity check passed on sample batch record.")
+            logs.append("Data consistency check passed for expected columns across all records.")
+
+    if records:
+        duplicate_ids = []
+        seen_ids: set[str] = set()
+        for record in records:
+            record_id = str(record.get("id", "")).strip()
+            if not record_id:
+                continue
+            if record_id in seen_ids:
+                duplicate_ids.append(record_id)
+            seen_ids.add(record_id)
+        if duplicate_ids:
+            failed += 1
+            defects.append(
+                _defect(
+                    "pipeline.duplicate_ids",
+                    "medium",
+                    "Duplicate record identifiers detected in batch.",
+                    category="data",
+                    duplicate_ids=sorted(set(duplicate_ids)),
+                )
+            )
+        else:
+            passed += 1
+            logs.append("Batch uniqueness check passed for record IDs.")
+
+    if expected_batch_size is not None and expected_batch_size >= 0:
+        if len(records) == expected_batch_size:
+            passed += 1
+            logs.append(f"Batch completeness check passed: {len(records)} records.")
+        else:
+            failed += 1
+            defects.append(
+                _defect(
+                    "pipeline.batch_completeness_failed",
+                    "medium",
+                    "Batch size does not match expected count.",
+                    category="data",
+                    expected_batch_size=expected_batch_size,
+                    actual_batch_size=len(records),
+                )
+            )
+    else:
+        skipped += 1
+        logs.append("Expected batch size not provided; completeness strict check skipped.")
 
     if transformations:
         passed += 1
         logs.append(f"Transformation chain declared: {', '.join(transformations)}")
     else:
         blocked += 1
-        defects.append(_defect("pipeline.transformations_missing", "low", "No transformations declared."))
+        defects.append(
+            _defect(
+                "pipeline.transformations_missing",
+                "low",
+                "No transformations declared.",
+                category="functional",
+                confidence_score=0.85,
+            )
+        )
 
     total_checks = passed + failed + blocked + skipped
     executed_cases = passed + failed + blocked
@@ -146,12 +236,14 @@ def run_data_pipeline_smoke(
             "artifacts": [str(trace_file)] + [item for item in [schema_path, batch_path] if item],
         },
         "recommendation_notes": [
-            "Data pipeline adapter executed offline schema/integrity smoke checks; add production dataset contract tests for release confidence."
+            "Data pipeline smoke validates schema, consistency, and batch completeness.",
+            "Add column type constraints and transformation result assertions for deeper coverage.",
         ],
         "raw_output": {
             "schema_path": schema_path,
             "batch_path": batch_path,
             "expected_columns": expected_columns,
             "transformations": transformations,
+            "expected_batch_size": expected_batch_size,
         },
     }

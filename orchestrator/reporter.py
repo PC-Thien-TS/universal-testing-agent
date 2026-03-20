@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from typing import TypeVar
+import xml.etree.ElementTree as ET
 
 from pydantic import BaseModel
 
@@ -15,11 +16,13 @@ from orchestrator.models import (
     PluginOnboardingResult,
     PluginReportContext,
     PluginValidationSummary,
+    QualityGateResult,
     StandardReport,
     TrendAnalysis,
     utc_now_iso,
 )
 from orchestrator.policy import evaluate_release_policy
+from orchestrator.quality_gates import evaluate_quality_gates
 from orchestrator.trends import flaky_suspicion_from_history
 
 TModel = TypeVar("TModel", bound=BaseModel)
@@ -44,6 +47,9 @@ def _existing_artifact_references(envelope: ExecutionEnvelope, config: RuntimeCo
         Path(config.paths.latest_testcases_markdown_file),
         Path(config.paths.latest_bug_report_template_file),
         Path(config.paths.latest_generated_assets_index_file),
+        Path(config.paths.latest_junit_file),
+        Path(config.paths.latest_ci_summary_file),
+        Path(config.paths.latest_quality_gates_file),
         Path(config.paths.latest_trends_file),
         Path(config.paths.latest_contract_validation_file),
         Path(config.paths.latest_compare_file),
@@ -71,6 +77,13 @@ def generate_report(envelope: ExecutionEnvelope, config: RuntimeConfig | None = 
         Path(runtime_config.paths.latest_contract_validation_file), ContractValidationResult
     )
     comparison_summary = _load_optional_model(Path(runtime_config.paths.latest_compare_file), ComparisonResult)
+    if contract_summary is None:
+        inline_contract = envelope.metadata.get("contract_validation_summary")
+        if isinstance(inline_contract, dict) and inline_contract:
+            try:
+                contract_summary = ContractValidationResult.model_validate(inline_contract)
+            except Exception:
+                contract_summary = None
 
     recommendation_notes = list(envelope.recommendation.notes)
     recommendation_notes.extend(policy.reasons)
@@ -107,6 +120,9 @@ def generate_report(envelope: ExecutionEnvelope, config: RuntimeConfig | None = 
                     {
                         "plugin_name": raw_context.get("plugin_name", ""),
                         "plugin_version": raw_context.get("plugin_version", ""),
+                        "author": raw_context.get("author"),
+                        "dependencies": raw_context.get("dependencies", []),
+                        "compatibility": raw_context.get("compatibility", {}),
                         "supported_product_types": raw_context.get("supported_product_types", []),
                         "supported_capabilities": raw_context.get("supported_capabilities", []),
                         "fallback_mode": raw_context.get("fallback_mode", "native"),
@@ -149,6 +165,22 @@ def generate_report(envelope: ExecutionEnvelope, config: RuntimeConfig | None = 
     if coverage_catalog_reference is not None and not isinstance(coverage_catalog_reference, str):
         coverage_catalog_reference = str(coverage_catalog_reference)
 
+    quality_gates = envelope.quality_gates
+    if quality_gates is None:
+        fallback_mode = envelope.metadata.get("adapter_registry_fallback_mode", "native")
+        if not isinstance(fallback_mode, str):
+            fallback_mode = "native"
+        quality_gates = evaluate_quality_gates(
+            acceptance=acceptance if isinstance(acceptance, dict) else {},
+            summary=envelope.summary,
+            coverage=envelope.coverage,
+            defects=envelope.defects,
+            contract_validation=contract_summary,
+            fallback_mode=fallback_mode,
+        )
+    if not isinstance(quality_gates, QualityGateResult):
+        quality_gates = QualityGateResult.model_validate(quality_gates)
+
     regression_signals: list[str] = []
     if comparison_summary:
         regression_signals.extend(comparison_summary.regression_signals)
@@ -162,6 +194,14 @@ def generate_report(envelope: ExecutionEnvelope, config: RuntimeConfig | None = 
         known_gaps.append(fallback_execution_note)
         known_gaps = list(dict.fromkeys(known_gaps))
 
+    capability_coverage_summary: dict[str, object] = {}
+    if plugin_context is not None:
+        for capability in plugin_context.supported_capabilities:
+            capability_coverage_summary[capability] = {
+                "supported": True,
+                "used": capability in capability_path_used,
+            }
+
     return StandardReport(
         run_id=envelope.run_id,
         project_name=envelope.project_name,
@@ -174,9 +214,10 @@ def generate_report(envelope: ExecutionEnvelope, config: RuntimeConfig | None = 
         summary=envelope.summary,
         coverage=envelope.coverage,
         defects=envelope.defects,
+        defect_details=envelope.defect_details,
         evidence=envelope.evidence,
         recommendation={
-            "release_ready": envelope.recommendation.release_ready and policy.release_ready,
+            "release_ready": envelope.recommendation.release_ready and policy.release_ready and quality_gates.gate_status == "pass",
             "notes": recommendation_notes,
         },
         plugin=plugin_context,
@@ -186,12 +227,14 @@ def generate_report(envelope: ExecutionEnvelope, config: RuntimeConfig | None = 
         coverage_catalog_reference=coverage_catalog_reference,
         capability_path_used=capability_path_used,
         policy=policy,
-        release_gate_summary="PASS" if policy.release_ready else "FAIL",
+        quality_gates=quality_gates,
+        release_gate_summary=quality_gates.gate_status.upper(),
         known_gaps=known_gaps,
         assumptions=assumptions,
         artifact_references=artifact_references,
         run_metadata=envelope.run_metadata,
         capabilities_used=capabilities_used,
+        capability_coverage_summary=capability_coverage_summary,
         taxonomy_coverage_focus=taxonomy_coverage_focus,
         fallback_execution_note=fallback_execution_note,
         trend_summary=trend_summary,
@@ -222,6 +265,9 @@ def render_markdown_report(report: StandardReport) -> str:
         plugin_section = (
             f"- Plugin: `{report.plugin.plugin_name}`\n"
             f"- Version: `{report.plugin.plugin_version}`\n"
+            f"- Author: `{report.plugin.author or 'unknown'}`\n"
+            f"- Dependencies: {', '.join(report.plugin.dependencies) if report.plugin.dependencies else '(none)'}\n"
+            f"- Compatibility: `{report.plugin.compatibility}`\n"
             f"- Adapter Target: `{report.plugin.adapter_target}`\n"
             f"- Fallback Mode: `{report.plugin.fallback_mode}`\n"
             f"- Discovered From: `{report.plugin.discovered_from}`"
@@ -278,6 +324,15 @@ def render_markdown_report(report: StandardReport) -> str:
             f"- Release ready changed: `{report.comparison_summary.release_ready_changed}`"
         )
 
+    quality_gate_section = "- (not available)"
+    if report.quality_gates is not None:
+        quality_gate_section = (
+            f"- Gate Status: `{report.quality_gates.gate_status}`\n"
+            f"- Recommendation: {report.quality_gates.recommendation}\n"
+            f"- Reasons: {', '.join(report.quality_gates.gate_reasons) if report.quality_gates.gate_reasons else '(none)'}\n"
+            f"- Blocking Issues: {', '.join(report.quality_gates.blocking_issues) if report.quality_gates.blocking_issues else '(none)'}"
+        )
+
     return f"""# Universal Testing Agent Report
 
 ## Project Summary
@@ -308,6 +363,9 @@ def render_markdown_report(report: StandardReport) -> str:
 - Medium: `{report.defects.medium}`
 - Low: `{report.defects.low}`
 
+## Defect Breakdown
+{_format_list([f"{item.id} | severity={item.severity} | category={item.category} | reproducibility={item.reproducibility} | confidence={item.confidence_score}" for item in report.defect_details])}
+
 ## Evidence
 ### Logs
 {_format_list(report.evidence.logs)}
@@ -332,11 +390,17 @@ def render_markdown_report(report: StandardReport) -> str:
 ### Reasons
 {_format_list(report.policy.reasons)}
 
+## Quality Gates
+{quality_gate_section}
+
 ## Release Gate Summary
 - Gate: `{report.release_gate_summary}`
 
 ## Capabilities Used
 {_format_list(report.capabilities_used)}
+
+## Capability Coverage Summary
+{_format_list([f"{key}: used={value.get('used')} supported={value.get('supported')}" for key, value in report.capability_coverage_summary.items()])}
 
 ## Capability Path Used
 {_format_list(report.capability_path_used)}
@@ -392,4 +456,110 @@ def save_markdown_report(report: StandardReport, output_path: str | Path) -> Pat
     path = Path(output_path)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(render_markdown_report(report), encoding="utf-8")
+    return path
+
+
+def render_junit_xml(report: StandardReport) -> str:
+    total = max(report.summary.total_checks, 1)
+    failures = max(report.summary.failed, 0)
+    errors = max(report.summary.blocked, 0)
+    skipped = max(report.summary.skipped, 0)
+    if report.quality_gates and report.quality_gates.gate_status == "fail":
+        failures += 1
+    elif report.quality_gates and report.quality_gates.gate_status == "warning":
+        skipped += 1
+    total += 1  # reserve one testcase for quality gate
+    passed = max(total - failures - errors - skipped, 0)
+
+    suite = ET.Element(
+        "testsuite",
+        attrib={
+            "name": f"uta.{report.project_type}",
+            "tests": str(total),
+            "failures": str(failures),
+            "errors": str(errors),
+            "skipped": str(skipped),
+            "time": str(report.duration_seconds),
+        },
+    )
+
+    for index in range(1, passed + 1):
+        ET.SubElement(
+            suite,
+            "testcase",
+            attrib={"classname": report.adapter, "name": f"check.pass.{index}", "time": "0"},
+        )
+
+    for index in range(1, failures + 1):
+        case = ET.SubElement(
+            suite,
+            "testcase",
+            attrib={"classname": report.adapter, "name": f"check.fail.{index}", "time": "0"},
+        )
+        failure = ET.SubElement(case, "failure", attrib={"message": "failed quality/assertion check"})
+        failure.text = "UTA execution reported a failed check."
+
+    for index in range(1, errors + 1):
+        case = ET.SubElement(
+            suite,
+            "testcase",
+            attrib={"classname": report.adapter, "name": f"check.blocked.{index}", "time": "0"},
+        )
+        error = ET.SubElement(case, "error", attrib={"message": "blocked execution check"})
+        error.text = "UTA execution reported a blocked check."
+
+    for index in range(1, skipped + 1):
+        case = ET.SubElement(
+            suite,
+            "testcase",
+            attrib={"classname": report.adapter, "name": f"check.skipped.{index}", "time": "0"},
+        )
+        ET.SubElement(case, "skipped")
+
+    quality_case = ET.SubElement(
+        suite,
+        "testcase",
+        attrib={"classname": "quality_gates", "name": "release_gate", "time": "0"},
+    )
+    if report.quality_gates and report.quality_gates.gate_status == "fail":
+        failure = ET.SubElement(quality_case, "failure", attrib={"message": "quality gate failed"})
+        failure.text = "; ".join(report.quality_gates.blocking_issues or report.quality_gates.gate_reasons)
+    elif report.quality_gates and report.quality_gates.gate_status == "warning":
+        skipped_node = ET.SubElement(quality_case, "skipped", attrib={"message": "quality gate warning"})
+        skipped_node.text = "; ".join(report.quality_gates.gate_reasons)
+
+    return ET.tostring(suite, encoding="unicode")
+
+
+def save_junit_report(report: StandardReport, output_path: str | Path) -> Path:
+    path = Path(output_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(render_junit_xml(report), encoding="utf-8")
+    return path
+
+
+def build_ci_summary(report: StandardReport) -> dict[str, object]:
+    gate_status = report.quality_gates.gate_status if report.quality_gates else "warning"
+    return {
+        "run_id": report.run_id,
+        "project_name": report.project_name,
+        "project_type": report.project_type,
+        "status": report.status,
+        "gate_status": gate_status,
+        "release_ready": report.recommendation.release_ready,
+        "summary": report.summary.model_dump(mode="json"),
+        "coverage": report.coverage.model_dump(mode="json"),
+        "defects": report.defects.model_dump(mode="json"),
+        "plugin": report.plugin.model_dump(mode="json") if report.plugin else None,
+        "support_level": report.support_level,
+        "fallback_execution_note": report.fallback_execution_note,
+        "generated_at": report.generated_at,
+    }
+
+
+def save_ci_summary(report: StandardReport, output_path: str | Path) -> Path:
+    path = Path(output_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = build_ci_summary(report)
+    path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
     return path

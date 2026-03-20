@@ -32,6 +32,19 @@ class WebAdapter(BaseAdapter):
         return GeneratedAssets(artifacts=["web-smoke-run"], metadata={"step_count": len(adapter_plan.steps)})
 
     def execute(self, intake: NormalizedIntake, generated_assets: GeneratedAssets) -> ExecutionResult:
+        request_selectors = intake.request.get("selectors", [])
+        selectors: list[str] = []
+        if isinstance(request_selectors, list):
+            selectors.extend(str(item) for item in request_selectors if str(item).strip())
+        auth_selector = str(intake.auth.get("success_selector", "")).strip()
+        if auth_selector and bool(intake.auth.get("required", False)):
+            selectors.append(auth_selector)
+        selectors = list(dict.fromkeys(selectors))
+
+        navigation_paths = intake.request.get("navigation_paths", [])
+        if not isinstance(navigation_paths, list):
+            navigation_paths = []
+
         runner_result = run_web_smoke(
             url=intake.target or "",
             auth=intake.auth,
@@ -39,6 +52,8 @@ class WebAdapter(BaseAdapter):
             screenshot_dir=self.config.paths.evidence_dir,
             browser=self.config.runners.web.browser,
             headless=self.config.runners.web.headless,
+            selectors=selectors,
+            navigation_paths=[str(item) for item in navigation_paths if str(item).strip()],
         )
         return ExecutionResult(
             status=runner_result.get("status", "failed"),
