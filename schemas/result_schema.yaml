@@ -1,4 +1,4 @@
-title: Result Schema v1.4
+title: Result Schema v1.5
 type: object
 required:
   - run_id
@@ -21,7 +21,7 @@ properties:
     type: string
   project_type:
     type: string
-    enum: [web, api, model]
+    enum: [web, api, model, mobile, llm_app]
   adapter:
     type: string
   status:
@@ -64,6 +64,16 @@ properties:
     type: array
     items:
       type: string
+  capabilities_used:
+    type: array
+    items:
+      type: string
+  taxonomy_coverage_focus:
+    type: array
+    items:
+      type: string
+  fallback_execution_note:
+    type: [string, "null"]
   trend_summary:
     type: [object, "null"]
   contract_validation_summary:

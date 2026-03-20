@@ -16,7 +16,7 @@ from orchestrator.intake import load_and_normalize, load_manifest
 from orchestrator.observability import RunObserver
 from orchestrator.planner import generate_test_strategy
 from orchestrator.reporter import generate_report, save_markdown_report, save_report
-from orchestrator.router import select_adapter
+from orchestrator.router import adapter_capabilities, adapter_fallback_mode, adapter_fallback_note, select_adapter
 from orchestrator.trends import analyze_trends, save_trends
 
 
@@ -171,6 +171,9 @@ def handle_run(args: argparse.Namespace) -> int:
         product_type = classify_product(intake)
         strategy = generate_test_strategy(intake, product_type)
         adapter = select_adapter(product_type, config)
+        capabilities = adapter_capabilities(product_type)
+        fallback_mode = adapter_fallback_mode(product_type)
+        fallback_note = adapter_fallback_note(product_type)
         observer.update_context(project_name=intake.name, project_type=product_type)
         observer.log(f"Executing adapter={adapter.name}.")
         envelope = execute_pipeline(
@@ -186,6 +189,11 @@ def handle_run(args: argparse.Namespace) -> int:
         envelope.run_metadata = run_metadata
         envelope.metadata["run_observability"] = run_metadata.model_dump(mode="json")
         envelope.metadata["artifact_dir"] = run_metadata.artifact_dir
+        envelope.metadata["capabilities_used"] = capabilities
+        envelope.metadata["taxonomy_coverage_focus"] = strategy.coverage_focus
+        envelope.metadata["adapter_registry_fallback_mode"] = fallback_mode
+        if fallback_mode != "native" or fallback_note:
+            envelope.metadata["fallback_execution_note"] = fallback_note or f"Adapter fallback mode active: {fallback_mode}"
 
         result_path = _resolve_output_path(args.output, config.paths.latest_result_file)
         save_execution_result(envelope, result_path)
@@ -202,6 +210,8 @@ def handle_run(args: argparse.Namespace) -> int:
                 "history_record_file": history_record_path,
                 "summary": envelope.summary.model_dump(mode="json"),
                 "recommendation": envelope.recommendation.model_dump(mode="json"),
+                "capabilities": capabilities,
+                "fallback_mode": fallback_mode,
                 "run_id": run_metadata.run_id,
                 "artifact_dir": run_metadata.artifact_dir,
             }

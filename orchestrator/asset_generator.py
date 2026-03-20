@@ -98,6 +98,62 @@ def _model_assets(intake: NormalizedIntake, strategy: StrategyPlan) -> tuple[lis
     return checklist, testcases, known_gaps, assumptions
 
 
+def _mobile_assets(intake: NormalizedIntake, strategy: StrategyPlan) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[str], list[str]]:
+    checklist = [
+        {"id": "MOB-CHK-001", "item": "App identifier or package artifact is configured", "priority": "P0"},
+        {"id": "MOB-CHK-002", "item": "Entry points/navigation targets are defined", "priority": "P0"},
+        {"id": "MOB-CHK-003", "item": "Permissions and auth expectations are declared", "priority": "P1"},
+        {"id": "MOB-CHK-004", "item": "Basic crash/usability smoke checks are included", "priority": "P1"},
+    ]
+    testcases = [
+        {
+            "id": "MOB-TC-001",
+            "title": "Install/open flow smoke",
+            "type": "mobile-smoke",
+            "steps": ["Resolve app package or app_id", "Launch app in skeleton mode", "Capture startup trace evidence"],
+            "expected": "No blocking launch/configuration errors in smoke mode",
+        },
+        {
+            "id": "MOB-TC-002",
+            "title": "Navigation + permission gate checks",
+            "type": "mobile-usability",
+            "steps": ["Open configured entry points", "Validate permission prompts configuration", "Record auth gate expectation"],
+            "expected": "Critical navigation and permission assumptions are satisfied",
+        },
+    ]
+    known_gaps = ["Gesture-level interaction and device-farm execution are not auto-generated in v1.5."]
+    assumptions = [f"Coverage focus: {', '.join(strategy.coverage_focus) or 'mobile smoke defaults'}"]
+    return checklist, testcases, known_gaps, assumptions
+
+
+def _llm_app_assets(intake: NormalizedIntake, strategy: StrategyPlan) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[str], list[str]]:
+    checklist = [
+        {"id": "LLM-CHK-001", "item": "Prompt/eval case set is configured", "priority": "P0"},
+        {"id": "LLM-CHK-002", "item": "Safety and fallback strategy are declared", "priority": "P0"},
+        {"id": "LLM-CHK-003", "item": "Tool-use readiness signals are available", "priority": "P1"},
+        {"id": "LLM-CHK-004", "item": "Response consistency checks are defined", "priority": "P1"},
+    ]
+    testcases = [
+        {
+            "id": "LLM-TC-001",
+            "title": "Prompt-response quality smoke",
+            "type": "llm-quality",
+            "steps": ["Run deterministic eval cases", "Check expected token signals", "Capture response logs"],
+            "expected": "Expected output signals are detected for critical prompts",
+        },
+        {
+            "id": "LLM-TC-002",
+            "title": "Safety/tool/fallback readiness",
+            "type": "llm-safety",
+            "steps": ["Validate safety indicators", "Validate tool declarations", "Validate fallback strategy"],
+            "expected": "No blocking gaps in safety/tool/fallback baseline",
+        },
+    ]
+    known_gaps = ["Judge-model scoring and red-team coverage are not auto-generated in v1.5 skeleton mode."]
+    assumptions = [f"Capability expectations: {', '.join(strategy.capability_expectations) or 'llm_app defaults'}"]
+    return checklist, testcases, known_gaps, assumptions
+
+
 def _render_checklist_markdown(project_type: str, checklist: list[dict[str, Any]]) -> str:
     lines = [f"# {project_type.upper()} Checklist", "", "| ID | Item | Priority |", "|---|---|---|"]
     for item in checklist:
@@ -160,6 +216,10 @@ def generate_assets(
         checklist, testcases, known_gaps, assumptions = _api_assets(intake, strategy)
     elif product_type == "model":
         checklist, testcases, known_gaps, assumptions = _model_assets(intake, strategy)
+    elif product_type == "mobile":
+        checklist, testcases, known_gaps, assumptions = _mobile_assets(intake, strategy)
+    elif product_type == "llm_app":
+        checklist, testcases, known_gaps, assumptions = _llm_app_assets(intake, strategy)
     else:
         checklist, testcases, known_gaps, assumptions = _web_assets(intake, strategy)
 

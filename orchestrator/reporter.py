@@ -86,6 +86,11 @@ def generate_report(envelope: ExecutionEnvelope, config: RuntimeConfig | None = 
     assumptions = list(dict.fromkeys(assumptions))
 
     artifact_references = _existing_artifact_references(envelope, runtime_config)
+    capabilities_used = [str(item) for item in envelope.metadata.get("capabilities_used", [])]
+    taxonomy_coverage_focus = [str(item) for item in envelope.metadata.get("taxonomy_coverage_focus", [])]
+    fallback_execution_note = envelope.metadata.get("fallback_execution_note")
+    if not isinstance(fallback_execution_note, str):
+        fallback_execution_note = None
 
     regression_signals: list[str] = []
     if comparison_summary:
@@ -96,6 +101,9 @@ def generate_report(envelope: ExecutionEnvelope, config: RuntimeConfig | None = 
 
     history_records = load_history_records(runtime_config.paths.history_dir)
     flaky_note = flaky_suspicion_from_history(history_records)
+    if fallback_execution_note:
+        known_gaps.append(fallback_execution_note)
+        known_gaps = list(dict.fromkeys(known_gaps))
 
     return StandardReport(
         run_id=envelope.run_id,
@@ -120,6 +128,9 @@ def generate_report(envelope: ExecutionEnvelope, config: RuntimeConfig | None = 
         assumptions=assumptions,
         artifact_references=artifact_references,
         run_metadata=envelope.run_metadata,
+        capabilities_used=capabilities_used,
+        taxonomy_coverage_focus=taxonomy_coverage_focus,
+        fallback_execution_note=fallback_execution_note,
         trend_summary=trend_summary,
         contract_validation_summary=contract_summary,
         comparison_summary=comparison_summary,
@@ -229,6 +240,15 @@ def render_markdown_report(report: StandardReport) -> str:
 
 ## Release Gate Summary
 - Gate: `{report.release_gate_summary}`
+
+## Capabilities Used
+{_format_list(report.capabilities_used)}
+
+## Taxonomy Coverage Focus
+{_format_list(report.taxonomy_coverage_focus)}
+
+## Fallback Execution Note
+- {report.fallback_execution_note or "(none)"}
 
 ## Trend Summary
 {trend_section}

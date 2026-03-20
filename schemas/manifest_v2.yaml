@@ -1,15 +1,23 @@
-title: Intake Schema v1.5
+title: Manifest Schema v2 (Draft)
 type: object
 required:
+  - project
+  - interfaces
+  - entry_points
   - artifacts
   - environment
+  - auth
   - request
   - acceptance
   - outputs
+  - oracle
+  - baseline
+  - dependencies
+  - dimensions
 properties:
   project:
     type: object
-    description: Manifest v2 project block
+    required: [name, type]
     properties:
       name:
         type: string
@@ -18,12 +26,6 @@ properties:
         enum: [web, api, model, mobile, llm_app, auto]
       subtype:
         type: string
-  project_type:
-    type: string
-    description: Product type for routing adapters (legacy v1 key)
-    enum: [web, api, model, mobile, llm_app, auto]
-  project_subtype:
-    type: [string, "null"]
   interfaces:
     type: array
     items:

@@ -1,19 +1,21 @@
 from __future__ import annotations
 
-from adapters.api_adapter import ApiAdapter
 from adapters.base import BaseAdapter
-from adapters.model_adapter import ModelAdapter
-from adapters.web_adapter import WebAdapter
 from orchestrator.config import RuntimeConfig
+from orchestrator.registry import get_registry
 
 
 def select_adapter(product_type: str, config: RuntimeConfig) -> BaseAdapter:
-    mapping: dict[str, type[BaseAdapter]] = {
-        "web": WebAdapter,
-        "api": ApiAdapter,
-        "model": ModelAdapter,
-    }
-    adapter_cls = mapping.get(product_type)
-    if adapter_cls is None:
-        raise ValueError(f"Unsupported project type: {product_type}")
-    return adapter_cls(config)
+    return get_registry().create_adapter(product_type, config)
+
+
+def adapter_capabilities(product_type: str) -> list[str]:
+    return get_registry().capability_names_for(product_type)
+
+
+def adapter_fallback_mode(product_type: str) -> str:
+    return get_registry().fallback_mode_for(product_type)
+
+
+def adapter_fallback_note(product_type: str) -> str | None:
+    return get_registry().fallback_note_for(product_type)

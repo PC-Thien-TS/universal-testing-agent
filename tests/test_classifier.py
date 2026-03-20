@@ -48,3 +48,21 @@ def test_classifier_detects_model_from_endpoint() -> None:
 def test_classifier_detects_model_from_labels_hint() -> None:
     intake = _intake(labels=["safe", "unsafe"], request={"goal": "evaluation"})
     assert classify_product(intake) == "model"
+
+
+def test_classifier_detects_mobile_from_artifact_hint() -> None:
+    intake = _intake(
+        project_type="auto",
+        artifacts=[Artifact(name="android-build", type="apk", path="builds/app.apk")],
+        request={"permissions": ["camera"]},
+    )
+    assert classify_product(intake) == "mobile"
+
+
+def test_classifier_detects_llm_app_from_prompt_tool_hints() -> None:
+    intake = _intake(
+        project_type="auto",
+        request={"eval_cases": [{"prompt": "help"}], "tools": ["search"], "fallback_strategy": "safe-default"},
+        labels=["safe"],
+    )
+    assert classify_product(intake) == "llm_app"

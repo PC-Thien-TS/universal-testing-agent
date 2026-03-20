@@ -22,13 +22,20 @@ class Artifact(UtaModel):
 class IntakeManifest(UtaModel):
     name: str = "unnamed-project"
     project_type: str = "auto"
+    project_subtype: str | None = None
     url: str | None = None
     labels: list[str] = Field(default_factory=list)
     artifacts: list[Artifact] = Field(default_factory=list)
+    interfaces: list[dict[str, Any]] = Field(default_factory=list)
+    entry_points: list[dict[str, Any]] = Field(default_factory=list)
     environment: dict[str, Any] = Field(default_factory=dict)
     request: dict[str, Any] = Field(default_factory=dict)
     acceptance: dict[str, Any] = Field(default_factory=dict)
     outputs: dict[str, Any] = Field(default_factory=dict)
+    oracle: dict[str, Any] = Field(default_factory=dict)
+    baseline: dict[str, Any] = Field(default_factory=dict)
+    dependencies: list[str] | dict[str, Any] = Field(default_factory=list)
+    dimensions: list[str] | dict[str, Any] = Field(default_factory=list)
     auth: dict[str, Any] = Field(default_factory=dict)
     feature: str | None = None
     constraints: list[str] | dict[str, Any] = Field(default_factory=list)
@@ -40,15 +47,22 @@ class NormalizedIntake(UtaModel):
     manifest_path: str
     name: str
     project_type: str
+    project_subtype: str | None = None
     url: str | None = None
     target: str | None = None
     feature: str | None = None
     labels: list[str] = Field(default_factory=list)
     artifacts: list[Artifact] = Field(default_factory=list)
+    interfaces: list[dict[str, Any]] = Field(default_factory=list)
+    entry_points: list[dict[str, Any]] = Field(default_factory=list)
     environment: dict[str, Any] = Field(default_factory=dict)
     request: dict[str, Any] = Field(default_factory=dict)
     acceptance: dict[str, Any] = Field(default_factory=dict)
     outputs: dict[str, Any] = Field(default_factory=dict)
+    oracle: dict[str, Any] = Field(default_factory=dict)
+    baseline: dict[str, Any] = Field(default_factory=dict)
+    dependencies: list[str] | dict[str, Any] = Field(default_factory=list)
+    dimensions: list[str] | dict[str, Any] = Field(default_factory=list)
     auth: dict[str, Any] = Field(default_factory=dict)
     constraints: list[str] | dict[str, Any] = Field(default_factory=list)
     api: dict[str, Any] = Field(default_factory=dict)
@@ -59,7 +73,10 @@ class StrategyPlan(UtaModel):
     scope: list[str] = Field(default_factory=list)
     risks: list[str] = Field(default_factory=list)
     coverage: dict[str, Any] = Field(default_factory=dict)
+    coverage_focus: list[str] = Field(default_factory=list)
     execution_priorities: list[str] = Field(default_factory=list)
+    capability_expectations: list[str] = Field(default_factory=list)
+    taxonomy_dimensions: list[str] = Field(default_factory=list)
     constraints: list[str] = Field(default_factory=list)
     endpoint_matrix_summary: list[dict[str, Any]] = Field(default_factory=list)
     evaluation_dimensions: list[str] = Field(default_factory=list)
@@ -239,6 +256,9 @@ class StandardReport(UtaModel):
     assumptions: list[str] = Field(default_factory=list)
     artifact_references: list[str] = Field(default_factory=list)
     run_metadata: RunMetadata | None = None
+    capabilities_used: list[str] = Field(default_factory=list)
+    taxonomy_coverage_focus: list[str] = Field(default_factory=list)
+    fallback_execution_note: str | None = None
     trend_summary: TrendAnalysis | None = None
     contract_validation_summary: ContractValidationResult | None = None
     comparison_summary: ComparisonResult | None = None

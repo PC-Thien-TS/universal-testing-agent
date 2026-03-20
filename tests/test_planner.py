@@ -68,3 +68,42 @@ def test_model_plan_includes_metrics() -> None:
     plan = generate_test_strategy(intake, "model")
     assert plan.evaluation_dimensions
     assert plan.metrics_to_compute
+
+
+def test_mobile_plan_includes_navigation_permission_focus() -> None:
+    intake = NormalizedIntake(
+        manifest_path="sample.yaml",
+        name="mobile-sample",
+        project_type="mobile",
+        request={"permissions": ["camera"]},
+        acceptance={},
+        outputs={},
+        auth={},
+        constraints=[],
+        api={},
+        model={},
+    )
+    plan = generate_test_strategy(intake, "mobile")
+    assert "navigation" in " ".join(plan.scope).lower()
+    assert any("permission" in value.lower() for value in plan.risks)
+    assert plan.coverage_focus
+
+
+def test_llm_app_plan_includes_eval_dimensions() -> None:
+    intake = NormalizedIntake(
+        manifest_path="sample.yaml",
+        name="llm-app-sample",
+        project_type="llm_app",
+        labels=["safe"],
+        request={"eval_cases": [{"prompt": "x"}], "tools": ["search"], "fallback_strategy": "safe-default"},
+        acceptance={},
+        outputs={},
+        auth={},
+        constraints=[],
+        api={},
+        model={},
+    )
+    plan = generate_test_strategy(intake, "llm_app")
+    assert plan.evaluation_dimensions
+    assert plan.metrics_to_compute
+    assert plan.capability_expectations

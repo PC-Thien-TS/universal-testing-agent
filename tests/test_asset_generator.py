@@ -45,3 +45,21 @@ def test_generate_assets_varies_by_product_type() -> None:
     )
     assert any(item["id"].startswith("API-") for item in api_bundle.checklist)
     assert any(item["id"].startswith("MOD-") for item in model_bundle.checklist)
+
+
+def test_generate_assets_supports_mobile_and_llm_app() -> None:
+    config = load_runtime_config()
+    mobile_bundle = generate_assets(
+        _intake("mobile"),
+        "mobile",
+        StrategyPlan(coverage_focus=["navigation", "permissions"]),
+        config,
+    )
+    llm_bundle = generate_assets(
+        _intake("llm_app"),
+        "llm_app",
+        StrategyPlan(capability_expectations=["reporting"], evaluation_dimensions=["safety"]),
+        config,
+    )
+    assert any(item["id"].startswith("MOB-") for item in mobile_bundle.checklist)
+    assert any(item["id"].startswith("LLM-") for item in llm_bundle.checklist)

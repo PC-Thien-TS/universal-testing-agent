@@ -11,6 +11,8 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 WEB_MANIFEST = PROJECT_ROOT / "manifests" / "samples" / "web_booking.yaml"
 API_MANIFEST = PROJECT_ROOT / "manifests" / "samples" / "api_verify_store.yaml"
 MODEL_MANIFEST = PROJECT_ROOT / "manifests" / "samples" / "model_basalt.yaml"
+MOBILE_MANIFEST = PROJECT_ROOT / "manifests" / "samples" / "mobile_app_smoke.yaml"
+LLM_MANIFEST = PROJECT_ROOT / "manifests" / "samples" / "llm_app_eval.yaml"
 RUNS_DIR = PROJECT_ROOT / "results" / "runs"
 HISTORY_DIR = PROJECT_ROOT / "results" / "history"
 
@@ -48,21 +50,31 @@ def test_validate_manifest_for_web_api_model() -> None:
     web = _assert_success(_run_cli("validate-manifest", str(WEB_MANIFEST)))
     api = _assert_success(_run_cli("validate-manifest", str(API_MANIFEST)))
     model = _assert_success(_run_cli("validate-manifest", str(MODEL_MANIFEST)))
+    mobile = _assert_success(_run_cli("validate-manifest", str(MOBILE_MANIFEST)))
+    llm = _assert_success(_run_cli("validate-manifest", str(LLM_MANIFEST)))
     _assert_observability_payload(web)
     _assert_observability_payload(api)
     _assert_observability_payload(model)
+    _assert_observability_payload(mobile)
+    _assert_observability_payload(llm)
 
 
 def test_plan_for_web_api_model() -> None:
     web = _assert_success(_run_cli("plan", str(WEB_MANIFEST), "--output", "results/plan_web.json"))
     api = _assert_success(_run_cli("plan", str(API_MANIFEST), "--output", "results/plan_api.json"))
     model = _assert_success(_run_cli("plan", str(MODEL_MANIFEST), "--output", "results/plan_model.json"))
+    mobile = _assert_success(_run_cli("plan", str(MOBILE_MANIFEST), "--output", "results/plan_mobile.json"))
+    llm = _assert_success(_run_cli("plan", str(LLM_MANIFEST), "--output", "results/plan_llm_app.json"))
     _assert_observability_payload(web)
     _assert_observability_payload(api)
     _assert_observability_payload(model)
+    _assert_observability_payload(mobile)
+    _assert_observability_payload(llm)
     assert (PROJECT_ROOT / "results" / "plan_web.json").exists()
     assert (PROJECT_ROOT / "results" / "plan_api.json").exists()
     assert (PROJECT_ROOT / "results" / "plan_model.json").exists()
+    assert (PROJECT_ROOT / "results" / "plan_mobile.json").exists()
+    assert (PROJECT_ROOT / "results" / "plan_llm_app.json").exists()
 
 
 def test_generate_assets_command_outputs_expected_files() -> None:
@@ -77,6 +89,15 @@ def test_generate_assets_command_outputs_expected_files() -> None:
     ]
     for file_path in expected_files:
         assert file_path.exists()
+
+
+def test_generate_assets_for_mobile_and_llm_manifests() -> None:
+    mobile_payload = _assert_success(_run_cli("generate-assets", str(MOBILE_MANIFEST)))
+    llm_payload = _assert_success(_run_cli("generate-assets", str(LLM_MANIFEST)))
+    _assert_observability_payload(mobile_payload)
+    _assert_observability_payload(llm_payload)
+    assert any("checklist_latest.json" in path for path in mobile_payload.get("artifacts", []))
+    assert any("testcases_latest.json" in path for path in llm_payload.get("artifacts", []))
 
 
 def test_run_for_web_api_model_and_report_with_policy() -> None:
@@ -111,6 +132,25 @@ def test_run_for_web_api_model_and_report_with_policy() -> None:
     assert "policy" in report_data
     assert "release_gate_summary" in report_data
     assert "artifact_references" in report_data
+    assert "capabilities_used" in report_data
+    assert "taxonomy_coverage_focus" in report_data
+
+
+def test_run_and_report_for_mobile_and_llm_manifests() -> None:
+    mobile_result = PROJECT_ROOT / "results" / "run_mobile.json"
+    llm_result = PROJECT_ROOT / "results" / "run_llm_app.json"
+    report_json = PROJECT_ROOT / "results" / "report_llm_app.json"
+
+    mobile_payload = _assert_success(_run_cli("run", str(MOBILE_MANIFEST), "--output", str(mobile_result)))
+    llm_payload = _assert_success(_run_cli("run", str(LLM_MANIFEST), "--output", str(llm_result)))
+    _assert_observability_payload(mobile_payload)
+    _assert_observability_payload(llm_payload)
+    assert mobile_result.exists()
+    assert llm_result.exists()
+
+    report_payload = _assert_success(_run_cli("report", str(llm_result), "--output", str(report_json)))
+    _assert_observability_payload(report_payload)
+    assert report_json.exists()
 
 
 def test_runs_artifact_directory_is_created() -> None:

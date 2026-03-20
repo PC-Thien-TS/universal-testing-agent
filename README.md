@@ -79,6 +79,41 @@ Universal Testing Agent (`uta`) is a manifest-driven AI testing orchestrator for
   - `validate-contract`
   - `compare`
 
+## v1.5 Release Highlights
+
+- Capability-driven orchestration foundation:
+  - `orchestrator/capabilities.py` introduces a typed capability model for end-to-end testing workflows.
+- Adapter registry:
+  - `orchestrator/registry.py` maps product type -> adapter, supported capabilities, and fallback mode.
+  - Supported product types now include:
+    - `web`
+    - `api`
+    - `model`
+    - `mobile`
+    - `llm_app`
+- Taxonomy engine:
+  - `orchestrator/taxonomy.py` adds deterministic defaults for dimensions, risks, planning priorities, and coverage focus by product type.
+  - Planner now uses taxonomy output for strategy generation.
+- Manifest v2 draft support:
+  - Added `schemas/manifest_v2.yaml`.
+  - Intake supports both legacy manifests and v2-style manifests with `project.name/type/subtype`, interfaces, entry points, oracle, baseline, dependencies, and dimensions.
+- New skeleton adapters:
+  - `adapters/mobile_adapter.py`
+  - `adapters/llm_app_adapter.py`
+  - Both are deterministic, offline-safe smoke adapters with fallback behavior.
+- New sample manifests:
+  - `manifests/samples/mobile_app_smoke.yaml`
+  - `manifests/samples/llm_app_eval.yaml`
+- Reporting improvements:
+  - Reports now include capabilities used, taxonomy coverage focus, and fallback execution notes when skeleton modes are active.
+- Extended tests for:
+  - registry behavior
+  - taxonomy behavior
+  - manifest v2 compatibility
+  - classifier support for `mobile` and `llm_app`
+  - new adapter behavior
+  - CLI smoke flow for new manifests
+
 ## Requirements
 
 - Python 3.11+
@@ -101,6 +136,8 @@ uta report results/latest.json
 uta trends
 uta validate-contract manifests/samples/api_verify_store.yaml
 uta compare results/latest.json results/latest.json
+uta validate-manifest manifests/samples/mobile_app_smoke.yaml
+uta validate-manifest manifests/samples/llm_app_eval.yaml
 ```
 
 ## Project Layout

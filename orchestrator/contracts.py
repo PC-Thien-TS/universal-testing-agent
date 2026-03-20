@@ -57,6 +57,32 @@ def _validate_model_artifacts(labels: list[str], artifacts: list[dict[str, Any]]
     return False, "Model dataset/sample artifact is missing"
 
 
+def _validate_mobile_contract(manifest: Any) -> tuple[bool, str]:
+    app_id = manifest.request.get("app_id") or manifest.environment.get("app_id")
+    has_mobile_artifact = any(
+        any(token in " ".join(str(artifact.get(key, "")) for key in ("name", "type", "path")).lower() for token in ("apk", "ipa", "mobile", "android", "ios"))
+        for artifact in [item.model_dump(mode="json") for item in manifest.artifacts]
+    )
+    has_entry_points = bool(manifest.entry_points or manifest.request.get("entry_points"))
+    if app_id or has_mobile_artifact:
+        if has_entry_points:
+            return True, "Mobile app identifiers/artifacts and entry points are present"
+        return True, "Mobile app identifier/artifact detected (entry points optional in skeleton mode)"
+    return False, "Missing mobile app_id or mobile artifact hints"
+
+
+def _validate_llm_app_contract(manifest: Any) -> tuple[bool, str]:
+    has_eval_cases = bool(manifest.request.get("eval_cases"))
+    has_tools_or_fallback = bool(manifest.request.get("tools")) or bool(manifest.request.get("fallback_strategy"))
+    has_dataset = any(
+        "dataset" in " ".join(str(artifact.get(key, "")) for key in ("name", "type", "path")).lower()
+        for artifact in [item.model_dump(mode="json") for item in manifest.artifacts]
+    )
+    if has_eval_cases and has_tools_or_fallback and (has_dataset or bool(manifest.labels)):
+        return True, "llm_app eval cases, safety/tool/fallback, and dataset/labels signals are present"
+    return False, "llm_app contract missing eval cases or safety/tool/fallback or dataset/labels signals"
+
+
 def validate_contracts(manifest_path: str | Path, result_path: str | Path | None = None) -> ContractValidationResult:
     manifest = load_manifest(manifest_path)
     checks: dict[str, dict[str, Any]] = {}
@@ -75,6 +101,16 @@ def validate_contracts(manifest_path: str | Path, result_path: str | Path | None
             artifacts=[item.model_dump(mode="json") for item in manifest.artifacts],
         )
         checks["model_contract_basics"] = {"passed": passed, "details": details}
+        if not passed:
+            reasons.append(details)
+    elif manifest.project_type == "mobile":
+        passed, details = _validate_mobile_contract(manifest)
+        checks["mobile_contract_basics"] = {"passed": passed, "details": details}
+        if not passed:
+            reasons.append(details)
+    elif manifest.project_type == "llm_app":
+        passed, details = _validate_llm_app_contract(manifest)
+        checks["llm_app_contract_basics"] = {"passed": passed, "details": details}
         if not passed:
             reasons.append(details)
     else:

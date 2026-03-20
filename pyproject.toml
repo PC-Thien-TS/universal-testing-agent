@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "universal-testing-agent"
-version = "1.4.0"
-description = "AI-driven testing orchestrator for web, API, and model products"
+version = "1.5.0"
+description = "AI-driven testing orchestrator for web, API, model, mobile, and llm_app products"
 readme = "README.md"
 requires-python = ">=3.11,<3.13"
 dependencies = [
