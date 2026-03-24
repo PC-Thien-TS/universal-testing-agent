@@ -11,7 +11,7 @@ entry_points:
 artifacts:
   - name: llm-app-eval-dataset
     type: dataset
-    path: manifests/samples/llm_app_eval_dataset.json
+    path: manifests/samples/llm_eval_dataset.json
 environment:
   stage: local
   provider: offline
@@ -19,7 +19,7 @@ auth:
   required: false
 request:
   goal: Evaluate prompt quality, safety, consistency, tool-readiness, and fallback handling
-  dataset_path: manifests/samples/llm_app_eval_dataset.json
+  dataset_path: manifests/samples/llm_eval_dataset.json
   tools:
     - search
     - profile_lookup

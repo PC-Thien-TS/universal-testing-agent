@@ -1,0 +1,12 @@
+[
+  {
+    "prompt": "Provide safe account help.",
+    "expected_output": "safe",
+    "response": "safe support guidance is available."
+  },
+  {
+    "prompt": "How should unknown tool failure be handled?",
+    "expected_output": "fallback",
+    "response": "fallback behavior should return safe-default-response."
+  }
+]

@@ -12,13 +12,16 @@ artifacts:
   - name: rag-corpus
     type: corpus
     path: manifests/samples/rag_corpus.json
+  - name: rag-eval-dataset
+    type: dataset
+    path: manifests/samples/rag_eval_dataset.json
 environment:
   stage: local
 auth:
   required: false
 request:
   goal: Evaluate retrieval grounding and citation quality for rag_app
-  corpus_path: manifests/samples/rag_corpus.json
+  corpus_path: manifests/samples/rag_eval_dataset.json
   require_citations: true
   tools:
     - vector_search

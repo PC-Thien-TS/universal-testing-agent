@@ -82,6 +82,8 @@ def test_markdown_report_renders_sections() -> None:
     assert "## Release Recommendation" in markdown
     assert "## Policy Evaluation" in markdown
     assert "## Quality Gates" in markdown
+    assert "## Environment Summary" in markdown
+    assert "## CI Summary" in markdown
     assert "## Capabilities Used" in markdown
     assert "## Capability Coverage Summary" in markdown
     assert "## Taxonomy Coverage Focus" in markdown
@@ -90,8 +92,10 @@ def test_markdown_report_renders_sections() -> None:
     assert "## Support Level" in markdown
     assert "## Coverage Catalog Reference" in markdown
     assert "## Trend Summary" in markdown
+    assert "## History Intelligence" in markdown
     assert "## Contract Validation Summary" in markdown
     assert "## Comparison Summary" in markdown
+    assert "## Dataset Evaluation Summary" in markdown
 
 
 def test_reporter_includes_plugin_metadata_from_envelope() -> None:
@@ -111,7 +115,7 @@ def test_reporter_includes_plugin_metadata_from_envelope() -> None:
         recommendation=Recommendation(release_ready=True, notes=["ready"]),
         plugin={
             "plugin_name": "llm_app",
-            "plugin_version": "1.8.0",
+            "plugin_version": "1.9.0",
             "author": "UTA Core Team",
             "dependencies": ["requests>=2.31"],
             "compatibility": {"python": ">=3.11,<3.13"},

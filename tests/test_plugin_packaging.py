@@ -9,7 +9,7 @@ def test_export_plugin_package_writes_metadata_file(tmp_path: Path) -> None:
     package_path, payload = export_plugin_package(registry, "web", tmp_path)
     assert package_path.exists()
     assert payload["plugin_name"] == "web"
-    assert payload["plugin_version"] == "1.8.0"
+    assert payload["plugin_version"] == "1.9.0"
     assert payload["author"]
 
 

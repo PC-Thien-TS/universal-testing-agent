@@ -200,6 +200,64 @@ Universal Testing Agent (`uta`) is a manifest-driven AI testing orchestrator for
   - capability coverage summary
   - plugin metadata/completeness context
 
+## v1.9 Release Highlights
+
+- CI/CD integration:
+  - Added GitHub Actions workflow: `.github/workflows/uta.yml`
+  - Workflow runs on `push` and `pull_request`, executes `pytest`, runs CLI smoke flows, and uploads JSON/Markdown/JUnit artifacts
+- CI-ready CLI behavior:
+  - `run` now supports:
+    - `--ci`
+    - `--exit-on-fail`
+  - `report` now supports:
+    - `--ci`
+    - `--exit-on-fail`
+  - Gate-aligned exit codes:
+    - `0` pass
+    - `1` warning
+    - `2` fail
+- Real environment support:
+  - Added typed environment model with support for:
+    - `environment.type` (`local`, `staging`, `prod_like`)
+    - `environment.base_url`
+    - `environment.auth`
+    - `environment.headers`
+    - `environment.timeouts`
+    - `environment.notes`
+  - Adapters/runners consume environment auth/headers/timeouts in a backward-compatible way
+- Multi-run history intelligence:
+  - Added `orchestrator/history_analyzer.py`
+  - Computes:
+    - regression/improvement signals
+    - trend
+    - stability score
+    - failing areas
+    - release readiness trend
+    - flaky classification (`stable`, `unstable`, `flaky`)
+- Dataset-driven evaluation enhancements:
+  - Added `orchestrator/dataset_loader.py` for deterministic JSON dataset loading
+  - Model metrics:
+    - accuracy
+    - precision
+    - recall
+    - F1
+  - RAG evaluation:
+    - correctness
+    - grounding
+    - hallucination heuristics
+  - LLM app evaluation:
+    - consistency
+    - expected-output match rate
+- Reporting enhancements:
+  - Environment summary block
+  - CI summary block
+  - Regression/flaky/history intelligence summaries
+  - Dataset evaluation summary
+- New sample artifacts/manifests:
+  - `manifests/samples/staging_api_verify_store.yaml`
+  - `manifests/samples/rag_eval_dataset.json`
+  - `manifests/samples/llm_eval_dataset.json`
+
 ## Requirements
 
 - Python 3.11+
@@ -238,7 +296,10 @@ uta run manifests/samples/data_pipeline_validation.yaml
 uta coverage-catalog
 uta scaffold-plugin sample_custom_product
 uta export-plugin web
-uta import-plugin results/plugin_packages/web-1.8.0.json
+uta import-plugin results/plugin_packages/web-1.9.0.json
+uta run manifests/samples/data_pipeline_validation.yaml --ci --exit-on-fail
+uta report results/latest.json --format ci --ci
+uta report results/latest.json --format junit --ci
 ```
 
 ## Project Layout

@@ -5,7 +5,7 @@ from typing import Any
 
 import yaml
 
-from orchestrator.models import IntakeManifest, NormalizedIntake
+from orchestrator.models import EnvironmentConfig, IntakeManifest, NormalizedIntake
 
 REQUIRED_SECTIONS: tuple[str, ...] = (
     "artifacts",
@@ -49,6 +49,22 @@ def _normalize_manifest_shape(raw: dict[str, Any]) -> dict[str, Any]:
 
     environment = normalized.get("environment", {})
     if isinstance(environment, dict):
+        environment.setdefault("type", environment.get("stage", "local"))
+        if isinstance(environment.get("type"), str):
+            env_type = str(environment.get("type", "local")).lower().strip()
+            if env_type not in {"local", "staging", "prod_like"}:
+                env_type = "local"
+            environment["type"] = env_type
+        environment.setdefault("base_url", environment.get("base_url") or normalized.get("url"))
+        environment.setdefault("auth", environment.get("auth") if isinstance(environment.get("auth"), dict) else {})
+        environment.setdefault(
+            "headers", environment.get("headers") if isinstance(environment.get("headers"), dict) else {}
+        )
+        environment.setdefault(
+            "timeouts", environment.get("timeouts") if isinstance(environment.get("timeouts"), dict) else {}
+        )
+        environment.setdefault("notes", environment.get("notes"))
+        normalized["environment"] = environment
         if not normalized.get("auth") and isinstance(environment.get("auth"), dict):
             normalized["auth"] = environment.get("auth", {})
         if not normalized.get("url"):
@@ -96,6 +112,17 @@ def load_manifest(manifest_path: str | Path) -> IntakeManifest:
 
 
 def normalize_input(manifest: IntakeManifest, manifest_path: str | Path) -> NormalizedIntake:
+    environment_dict: dict[str, Any]
+    if isinstance(manifest.environment, EnvironmentConfig):
+        environment_config = manifest.environment
+        environment_dict = environment_config.model_dump(mode="json")
+    elif isinstance(manifest.environment, dict):
+        environment_config = EnvironmentConfig.model_validate(manifest.environment)
+        environment_dict = environment_config.model_dump(mode="json")
+    else:
+        environment_config = EnvironmentConfig()
+        environment_dict = environment_config.model_dump(mode="json")
+
     first_entry_point = manifest.entry_points[0] if manifest.entry_points else {}
     first_entry_target = None
     if isinstance(first_entry_point, dict):
@@ -106,7 +133,7 @@ def normalize_input(manifest: IntakeManifest, manifest_path: str | Path) -> Norm
     target = (
         manifest.url
         or first_entry_target
-        or manifest.environment.get("base_url")
+        or environment_dict.get("base_url")
         or manifest.request.get("target")
         or manifest.api.get("base_url")
         or manifest.model.get("endpoint")
@@ -124,7 +151,8 @@ def normalize_input(manifest: IntakeManifest, manifest_path: str | Path) -> Norm
         artifacts=manifest.artifacts,
         interfaces=manifest.interfaces,
         entry_points=manifest.entry_points,
-        environment=manifest.environment,
+        environment=environment_dict,
+        environment_config=environment_config,
         request=manifest.request,
         acceptance=manifest.acceptance,
         outputs=manifest.outputs,

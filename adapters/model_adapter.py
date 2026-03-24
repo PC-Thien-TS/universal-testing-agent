@@ -46,10 +46,16 @@ class ModelAdapter(BaseAdapter):
                 break
 
         threshold = float(intake.acceptance.get("quality_threshold", self.config.runners.model.default_threshold))
+        env_timeouts = intake.environment_config.timeouts or intake.environment.get("timeouts", {})
+        raw_timeout = env_timeouts.get("model_s", env_timeouts.get("model", self.config.timeouts.model_s))
+        try:
+            timeout_s = int(raw_timeout)
+        except Exception:
+            timeout_s = int(self.config.timeouts.model_s)
         runner_result = run_model_evaluation(
             endpoint=endpoint,
             eval_cases=eval_cases,
-            timeout_s=self.config.timeouts.model_s,
+            timeout_s=timeout_s,
             threshold=threshold,
             labels=intake.labels,
             dataset_path=dataset_path,

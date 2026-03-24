@@ -1,4 +1,4 @@
-title: Coverage Catalog Schema v1.8
+title: Coverage Catalog Schema v1.9
 type: object
 required:
   - generated_at

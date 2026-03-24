@@ -1,4 +1,4 @@
-title: Quality Gates Schema v1.8
+title: Quality Gates Schema v1.9
 type: object
 required:
   - gate_status

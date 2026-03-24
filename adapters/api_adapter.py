@@ -17,7 +17,7 @@ class ApiAdapter(BaseAdapter):
     name = "api"
 
     def discover(self, intake: NormalizedIntake) -> DiscoveryResult:
-        base_url = intake.api.get("base_url") or intake.environment.get("base_url") or intake.target or ""
+        base_url = intake.api.get("base_url") or intake.environment_config.base_url or intake.environment.get("base_url") or intake.target or ""
         endpoints = intake.request.get("endpoints", [])
         return DiscoveryResult(items=[base_url, *[str(endpoint) for endpoint in endpoints]], metadata={"adapter": self.name})
 
@@ -38,10 +38,12 @@ class ApiAdapter(BaseAdapter):
         )
 
     def execute(self, intake: NormalizedIntake, generated_assets: GeneratedAssets) -> ExecutionResult:
-        base_url = intake.api.get("base_url") or intake.environment.get("base_url") or intake.target or ""
+        base_url = intake.api.get("base_url") or intake.environment_config.base_url or intake.environment.get("base_url") or intake.target or ""
         endpoints = intake.request.get("endpoints", ["/"])
-        environment_auth = intake.environment.get("auth", {})
+        environment_auth = intake.environment_config.auth or intake.environment.get("auth", {})
         auth_config = intake.auth if intake.auth else environment_auth if isinstance(environment_auth, dict) else {}
+        environment_headers = intake.environment_config.headers or intake.environment.get("headers", {})
+        environment_timeouts = intake.environment_config.timeouts or intake.environment.get("timeouts", {})
         required_fields = intake.request.get("required_fields", {})
         negative_cases = intake.request.get("negative_cases", [])
         runner_result = run_api_pytest(
@@ -52,6 +54,8 @@ class ApiAdapter(BaseAdapter):
             auth=auth_config if isinstance(auth_config, dict) else {},
             required_fields=required_fields if isinstance(required_fields, dict) else {},
             negative_cases=negative_cases if isinstance(negative_cases, list) else [],
+            headers=environment_headers if isinstance(environment_headers, dict) else {},
+            environment_timeouts=environment_timeouts if isinstance(environment_timeouts, dict) else {},
         )
         return ExecutionResult(
             status=runner_result.get("status", "failed"),

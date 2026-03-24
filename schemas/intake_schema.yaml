@@ -1,4 +1,4 @@
-title: Intake Schema v1.5
+title: Intake Schema v1.9
 type: object
 required:
   - artifacts
@@ -38,6 +38,20 @@ properties:
       type: object
   environment:
     type: object
+    properties:
+      type:
+        type: string
+        enum: [local, staging, prod_like]
+      base_url:
+        type: string
+      auth:
+        type: object
+      headers:
+        type: object
+      timeouts:
+        type: object
+      notes:
+        type: string
   auth:
     type: object
   request:

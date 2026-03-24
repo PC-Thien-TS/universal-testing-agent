@@ -29,6 +29,8 @@ class PathSettings(BaseModel):
     history_index_file: str = "results/history/history_index.json"
     latest_trends_file: str = "results/trends_latest.json"
     latest_trends_markdown_file: str = "results/trends_latest.md"
+    latest_history_intelligence_file: str = "results/history_intelligence_latest.json"
+    latest_history_intelligence_markdown_file: str = "results/history_intelligence_latest.md"
     latest_contract_validation_file: str = "results/contract_validation_latest.json"
     latest_contract_validation_markdown_file: str = "results/contract_validation_latest.md"
     latest_compare_file: str = "results/compare_latest.json"
@@ -119,6 +121,10 @@ def load_runtime_config(config_path: str | Path | None = None) -> RuntimeConfig:
         config.paths.latest_trends_file = value
     if value := os.getenv("UTA_TRENDS_MD_FILE"):
         config.paths.latest_trends_markdown_file = value
+    if value := os.getenv("UTA_HISTORY_INTELLIGENCE_FILE"):
+        config.paths.latest_history_intelligence_file = value
+    if value := os.getenv("UTA_HISTORY_INTELLIGENCE_MD_FILE"):
+        config.paths.latest_history_intelligence_markdown_file = value
     if value := os.getenv("UTA_CONTRACT_VALIDATION_FILE"):
         config.paths.latest_contract_validation_file = value
     if value := os.getenv("UTA_CONTRACT_VALIDATION_MD_FILE"):
@@ -168,6 +174,8 @@ def ensure_runtime_dirs(config: RuntimeConfig) -> None:
     Path(config.paths.history_index_file).parent.mkdir(parents=True, exist_ok=True)
     Path(config.paths.latest_trends_file).parent.mkdir(parents=True, exist_ok=True)
     Path(config.paths.latest_trends_markdown_file).parent.mkdir(parents=True, exist_ok=True)
+    Path(config.paths.latest_history_intelligence_file).parent.mkdir(parents=True, exist_ok=True)
+    Path(config.paths.latest_history_intelligence_markdown_file).parent.mkdir(parents=True, exist_ok=True)
     Path(config.paths.latest_contract_validation_file).parent.mkdir(parents=True, exist_ok=True)
     Path(config.paths.latest_contract_validation_markdown_file).parent.mkdir(parents=True, exist_ok=True)
     Path(config.paths.latest_compare_file).parent.mkdir(parents=True, exist_ok=True)

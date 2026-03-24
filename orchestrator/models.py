@@ -19,6 +19,15 @@ class Artifact(UtaModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
+class EnvironmentConfig(UtaModel):
+    type: Literal["local", "staging", "prod_like"] = "local"
+    base_url: str | None = None
+    auth: dict[str, Any] = Field(default_factory=dict)
+    headers: dict[str, str] = Field(default_factory=dict)
+    timeouts: dict[str, float] = Field(default_factory=dict)
+    notes: str | None = None
+
+
 class IntakeManifest(UtaModel):
     name: str = "unnamed-project"
     project_type: str = "auto"
@@ -28,7 +37,7 @@ class IntakeManifest(UtaModel):
     artifacts: list[Artifact] = Field(default_factory=list)
     interfaces: list[dict[str, Any]] = Field(default_factory=list)
     entry_points: list[dict[str, Any]] = Field(default_factory=list)
-    environment: dict[str, Any] = Field(default_factory=dict)
+    environment: EnvironmentConfig | dict[str, Any] = Field(default_factory=EnvironmentConfig)
     request: dict[str, Any] = Field(default_factory=dict)
     acceptance: dict[str, Any] = Field(default_factory=dict)
     outputs: dict[str, Any] = Field(default_factory=dict)
@@ -56,6 +65,7 @@ class NormalizedIntake(UtaModel):
     interfaces: list[dict[str, Any]] = Field(default_factory=list)
     entry_points: list[dict[str, Any]] = Field(default_factory=list)
     environment: dict[str, Any] = Field(default_factory=dict)
+    environment_config: EnvironmentConfig = Field(default_factory=EnvironmentConfig)
     request: dict[str, Any] = Field(default_factory=dict)
     acceptance: dict[str, Any] = Field(default_factory=dict)
     outputs: dict[str, Any] = Field(default_factory=dict)
@@ -234,6 +244,9 @@ class HistoryRecord(UtaModel):
     project_type: str
     adapter: str
     status: str
+    gate_status: str | None = None
+    support_level: str | None = None
+    environment_type: str | None = None
     summary: SummaryStats
     coverage: CoverageStats
     defects: DefectSummary
@@ -247,6 +260,18 @@ class TrendAnalysis(UtaModel):
     coverage_trend: Literal["improving", "stable", "degrading"] = "stable"
     defect_trend: Literal["improving", "stable", "degrading"] = "stable"
     release_readiness_trend: Literal["improving", "stable", "degrading"] = "stable"
+
+
+class HistoryIntelligence(UtaModel):
+    runs_analyzed: int = 0
+    regression_detected: bool = False
+    improvement_detected: bool = False
+    trend: Literal["improving", "stable", "degrading"] = "stable"
+    stability_score: float = 1.0
+    failing_areas: list[str] = Field(default_factory=list)
+    release_readiness_trend: Literal["improving", "stable", "degrading"] = "stable"
+    flaky_classification: Literal["stable", "unstable", "flaky"] = "stable"
+    gate_instability: bool = False
 
 
 class ContractValidationResult(UtaModel):
@@ -305,6 +330,7 @@ class ExecutionEnvelope(UtaModel):
     known_gaps: list[str] = Field(default_factory=list)
     assumptions: list[str] = Field(default_factory=list)
     metadata: dict[str, Any] = Field(default_factory=dict)
+    ci_summary: dict[str, Any] = Field(default_factory=dict)
     raw_output: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -332,6 +358,12 @@ class StandardReport(UtaModel):
     policy: PolicyEvaluation
     quality_gates: QualityGateResult | None = None
     release_gate_summary: str
+    environment_summary: dict[str, Any] = Field(default_factory=dict)
+    ci_summary: dict[str, Any] = Field(default_factory=dict)
+    history_intelligence: HistoryIntelligence | None = None
+    regression_detected: bool = False
+    flaky_summary: str | None = None
+    dataset_evaluation_summary: dict[str, Any] = Field(default_factory=dict)
     known_gaps: list[str] = Field(default_factory=list)
     assumptions: list[str] = Field(default_factory=list)
     artifact_references: list[str] = Field(default_factory=list)

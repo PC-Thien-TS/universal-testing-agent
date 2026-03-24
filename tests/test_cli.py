@@ -10,6 +10,7 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 WEB_MANIFEST = PROJECT_ROOT / "manifests" / "samples" / "web_booking.yaml"
 API_MANIFEST = PROJECT_ROOT / "manifests" / "samples" / "api_verify_store.yaml"
+STAGING_API_MANIFEST = PROJECT_ROOT / "manifests" / "samples" / "staging_api_verify_store.yaml"
 MODEL_MANIFEST = PROJECT_ROOT / "manifests" / "samples" / "model_basalt.yaml"
 MOBILE_MANIFEST = PROJECT_ROOT / "manifests" / "samples" / "mobile_app_smoke.yaml"
 LLM_MANIFEST = PROJECT_ROOT / "manifests" / "samples" / "llm_app_eval.yaml"
@@ -52,6 +53,7 @@ def _assert_observability_payload(payload: dict) -> None:
 def test_validate_manifest_for_supported_product_samples() -> None:
     web = _assert_success(_run_cli("validate-manifest", str(WEB_MANIFEST)))
     api = _assert_success(_run_cli("validate-manifest", str(API_MANIFEST)))
+    staging_api = _assert_success(_run_cli("validate-manifest", str(STAGING_API_MANIFEST)))
     model = _assert_success(_run_cli("validate-manifest", str(MODEL_MANIFEST)))
     mobile = _assert_success(_run_cli("validate-manifest", str(MOBILE_MANIFEST)))
     llm = _assert_success(_run_cli("validate-manifest", str(LLM_MANIFEST)))
@@ -60,6 +62,7 @@ def test_validate_manifest_for_supported_product_samples() -> None:
     pipeline = _assert_success(_run_cli("validate-manifest", str(PIPELINE_MANIFEST)))
     _assert_observability_payload(web)
     _assert_observability_payload(api)
+    _assert_observability_payload(staging_api)
     _assert_observability_payload(model)
     _assert_observability_payload(mobile)
     _assert_observability_payload(llm)
@@ -200,7 +203,10 @@ def test_history_trends_validate_contract_and_compare_commands() -> None:
     _assert_observability_payload(trends_payload)
     assert (PROJECT_ROOT / "results" / "trends_latest.json").exists()
     assert (PROJECT_ROOT / "results" / "trends_latest.md").exists()
+    assert (PROJECT_ROOT / "results" / "history_intelligence_latest.json").exists()
+    assert (PROJECT_ROOT / "results" / "history_intelligence_latest.md").exists()
     assert "trends" in trends_payload
+    assert "history_intelligence" in trends_payload
 
     contract_payload = _assert_success(_run_cli("validate-contract", str(API_MANIFEST)))
     _assert_observability_payload(contract_payload)

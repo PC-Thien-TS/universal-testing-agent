@@ -58,3 +58,4 @@ def test_ci_summary_file_is_generated(tmp_path: Path) -> None:
     payload = build_ci_summary(report)
     assert output.exists()
     assert payload["gate_status"] in {"pass", "warning", "fail"}
+    assert payload["exit_code"] in {0, 1, 2}

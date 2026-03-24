@@ -1,0 +1,18 @@
+[
+  {
+    "prompt": "What is the refund window?",
+    "expected_contains": "30 days",
+    "expected_reference": "policy/refund",
+    "response": "The refund window is 30 days [policy/refund].",
+    "source": "policy/refund",
+    "tags": ["grounded"]
+  },
+  {
+    "prompt": "Can refunds be guaranteed?",
+    "expected_contains": "case by case",
+    "expected_reference": "policy/refund",
+    "response": "Refunds are guaranteed 100% forever.",
+    "source": "policy/refund",
+    "tags": ["hallucination"]
+  }
+]

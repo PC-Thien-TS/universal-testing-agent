@@ -1,4 +1,4 @@
-title: Plugin Inspection Schema v1.8
+title: Plugin Inspection Schema v1.9
 type: object
 required:
   - plugin_name

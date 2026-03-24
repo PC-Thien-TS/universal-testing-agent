@@ -1,4 +1,4 @@
-title: Result Schema v1.8
+title: Result Schema v1.9
 type: object
 required:
   - run_id
@@ -107,6 +107,18 @@ properties:
         type: object
   run_metadata:
     type: [object, "null"]
+  environment_summary:
+    type: object
+  ci_summary:
+    type: object
+  history_intelligence:
+    type: [object, "null"]
+  regression_detected:
+    type: boolean
+  flaky_summary:
+    type: [string, "null"]
+  dataset_evaluation_summary:
+    type: object
   generated_artifacts:
     type: array
     items:

@@ -1,0 +1,47 @@
+name: UTA CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test-and-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install package
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+
+      - name: Run tests
+        run: python -m pytest tests -q
+
+      - name: CLI smoke flow
+        run: |
+          python -m cli.main validate-manifest manifests/samples/rag_app_eval.yaml
+          python -m cli.main run manifests/samples/data_pipeline_validation.yaml --ci --exit-on-fail
+          python -m cli.main report results/latest.json
+          python -m cli.main report results/latest.json --format ci --ci
+          python -m cli.main report results/latest.json --format junit --ci
+
+      - name: Upload UTA artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: uta-results
+          path: |
+            results/**/*.json
+            results/**/*.md
+            results/**/*.xml
+            results/runs/**/metadata.json
+            results/runs/**/run.log

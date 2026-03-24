@@ -91,6 +91,9 @@ def execute_pipeline(
     metadata = {
         "manifest_path": intake.manifest_path,
         "acceptance": intake.acceptance,
+        "environment": intake.environment,
+        "environment_type": intake.environment_config.type,
+        "environment_base_url": intake.environment_config.base_url,
         "outputs": intake.outputs,
         "strategy": strategy.model_dump(mode="json"),
     }

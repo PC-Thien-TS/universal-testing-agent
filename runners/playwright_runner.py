@@ -79,6 +79,7 @@ def run_web_smoke(
     headless: bool = True,
     selectors: list[str] | None = None,
     navigation_paths: list[str] | None = None,
+    headers: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     logs: list[str] = []
     screenshots: list[str] = []
@@ -86,6 +87,7 @@ def run_web_smoke(
 
     selectors = [item for item in (selectors or []) if str(item).strip()]
     navigation_paths = [item for item in (navigation_paths or ["/"]) if str(item).strip()]
+    request_headers = {str(key): str(value) for key, value in (headers or {}).items()}
     planned_cases = 1 + len(selectors) + len(navigation_paths)
     passed = 0
     failed = 0
@@ -127,7 +129,12 @@ def run_web_smoke(
     html = ""
     page_loaded = False
     try:
-        response = requests.get(url, timeout=max(timeout_ms / 1000, 1), allow_redirects=True)
+        response = requests.get(
+            url,
+            timeout=max(timeout_ms / 1000, 1),
+            allow_redirects=True,
+            headers=request_headers if request_headers else None,
+        )
         logs.append(f"HTTP GET {url} -> {response.status_code}")
         if response.status_code < 400:
             page_loaded = True
@@ -195,7 +202,12 @@ def run_web_smoke(
     for nav_path in navigation_paths:
         nav_url = urljoin(url.rstrip("/") + "/", str(nav_path).lstrip("/"))
         try:
-            nav_response = requests.get(nav_url, timeout=max(timeout_ms / 1000, 1), allow_redirects=True)
+            nav_response = requests.get(
+                nav_url,
+                timeout=max(timeout_ms / 1000, 1),
+                allow_redirects=True,
+                headers=request_headers if request_headers else None,
+            )
             logs.append(f"HTTP NAV {nav_url} -> {nav_response.status_code}")
             if nav_response.status_code < 400:
                 passed += 1
@@ -287,6 +299,7 @@ def run_web_smoke(
             "timeout_ms": timeout_ms,
             "selectors": selectors,
             "navigation_paths": navigation_paths,
+            "headers_applied": sorted(list(request_headers.keys())),
             "playwright_probe": playwright_message,
         },
     }

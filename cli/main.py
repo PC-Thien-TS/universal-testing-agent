@@ -13,6 +13,7 @@ from orchestrator.coverage_catalog import build_coverage_catalog, save_coverage_
 from orchestrator.contracts import save_contract_validation, validate_contracts
 from orchestrator.executor import execute_pipeline, load_execution_result, save_execution_result
 from orchestrator.history import load_history_records, persist_history_record, record_from_execution, record_from_report
+from orchestrator.history_analyzer import analyze_history_intelligence, save_history_intelligence
 from orchestrator.intake import load_and_normalize, load_manifest
 from orchestrator.observability import RunObserver
 from orchestrator.planner import generate_test_strategy
@@ -268,6 +269,29 @@ def handle_run(args: argparse.Namespace) -> int:
         result_path = _resolve_output_path(args.output, config.paths.latest_result_file)
         save_execution_result(envelope, result_path)
         history_record_path = _persist_history_from_execution(envelope, config)
+        gate_exit = _gate_exit_code(quality_gates.gate_status)
+
+        report_path: str | None = None
+        markdown_path: str | None = None
+        ci_summary_path: str | None = None
+        junit_path: str | None = None
+        if bool(args.ci):
+            report = generate_report(envelope, config=config)
+            report_json_path = Path(config.paths.latest_report_file)
+            report_md_path = Path(config.paths.latest_report_markdown_file)
+            report_ci_path = Path(config.paths.latest_ci_summary_file)
+            report_junit_path = Path(config.paths.latest_junit_file)
+            save_report(report, report_json_path)
+            save_markdown_report(report, report_md_path)
+            save_ci_summary(report, report_ci_path)
+            save_junit_report(report, report_junit_path)
+            envelope.ci_summary = report.ci_summary
+            save_execution_result(envelope, result_path)
+            report_path = str(report_json_path)
+            markdown_path = str(report_md_path)
+            ci_summary_path = str(report_ci_path)
+            junit_path = str(report_junit_path)
+            observer.log(f"CI sidecar reports generated with gate_exit={gate_exit}.")
 
         _print_json(
             {
@@ -287,10 +311,18 @@ def handle_run(args: argparse.Namespace) -> int:
                 "support_level": plugin_inspection.validation.support_level,
                 "plugin_onboarding": onboarding.model_dump(mode="json"),
                 "quality_gates": quality_gates.model_dump(mode="json"),
+                "gate_exit_code": gate_exit,
+                "ci_mode": bool(args.ci),
+                "report_file": report_path,
+                "markdown_report_file": markdown_path,
+                "ci_summary_file": ci_summary_path,
+                "junit_file": junit_path,
                 "run_id": run_metadata.run_id,
                 "artifact_dir": run_metadata.artifact_dir,
             }
         )
+        if bool(args.ci) or bool(args.exit_on_fail):
+            return gate_exit
         return 0
     except Exception as exc:
         observer.log(f"Run command failed: {exc}")
@@ -336,10 +368,20 @@ def handle_report(args: argparse.Namespace) -> int:
             save_markdown_report(report, markdown_path)
         else:
             raise ValueError(f"Unsupported report format '{format_name}'.")
+
+        if bool(args.ci):
+            if ci_path is None:
+                ci_path = Path(config.paths.latest_ci_summary_file)
+                save_ci_summary(report, ci_path)
+            if junit_path is None:
+                junit_path = Path(config.paths.latest_junit_file)
+                save_junit_report(report, junit_path)
+
         observer.log("Report generation completed.")
         run_metadata = observer.finalize(status="reported")
         history_record_path = _persist_history_from_report(report, config)
         gate_exit = _gate_exit_code(report.quality_gates.gate_status if report.quality_gates else None)
+        effective_exit = gate_exit if bool(args.ci) or bool(args.exit_on_fail) or format_name in {"ci", "junit"} else 0
 
         _print_json(
             {
@@ -362,12 +404,21 @@ def handle_report(args: argparse.Namespace) -> int:
                 if report.plugin_onboarding
                 else None,
                 "support_level": report.support_level,
+                "environment_summary": report.environment_summary,
+                "history_intelligence": report.history_intelligence.model_dump(mode="json")
+                if report.history_intelligence
+                else None,
+                "regression_detected": report.regression_detected,
+                "flaky_summary": report.flaky_summary,
+                "dataset_evaluation_summary": report.dataset_evaluation_summary,
+                "ci_mode": bool(args.ci),
                 "exit_code": gate_exit,
+                "effective_exit_code": effective_exit,
                 "run_id": run_metadata.run_id,
                 "artifact_dir": run_metadata.artifact_dir,
             }
         )
-        return gate_exit
+        return effective_exit
     except Exception as exc:
         observer.log(f"Report command failed: {exc}")
         run_metadata = observer.finalize(status="error")
@@ -390,10 +441,16 @@ def handle_trends(args: argparse.Namespace) -> int:
     try:
         records = load_history_records(config.paths.history_dir)
         trends = analyze_trends(records)
+        history_intelligence = analyze_history_intelligence(records)
         json_path, md_path = save_trends(
             trends,
             config.paths.latest_trends_file,
             config.paths.latest_trends_markdown_file,
+        )
+        intelligence_json_path, intelligence_md_path = save_history_intelligence(
+            history_intelligence,
+            config.paths.latest_history_intelligence_file,
+            config.paths.latest_history_intelligence_markdown_file,
         )
         observer.log("Trend analysis generated.")
         run_metadata = observer.finalize(status="analyzed")
@@ -403,6 +460,9 @@ def handle_trends(args: argparse.Namespace) -> int:
                 "trends_file": str(json_path),
                 "trends_markdown_file": str(md_path),
                 "trends": trends.model_dump(mode="json"),
+                "history_intelligence_file": str(intelligence_json_path),
+                "history_intelligence_markdown_file": str(intelligence_md_path),
+                "history_intelligence": history_intelligence.model_dump(mode="json"),
                 "run_id": run_metadata.run_id,
                 "artifact_dir": run_metadata.artifact_dir,
             }
@@ -830,6 +890,8 @@ def build_parser() -> argparse.ArgumentParser:
     run_parser = subparsers.add_parser("run", help="Execute tests via routed adapter")
     run_parser.add_argument("manifest", help="Path to manifest file")
     run_parser.add_argument("--output", help="Output path for execution result JSON", default=None)
+    run_parser.add_argument("--ci", action="store_true", help="Enable CI mode sidecar outputs and gate-based exit codes")
+    run_parser.add_argument("--exit-on-fail", action="store_true", help="Return quality-gate exit code for CI pipelines")
     run_parser.set_defaults(handler=handle_run)
 
     report_parser = subparsers.add_parser("report", help="Generate standardized report from result JSON")
@@ -837,6 +899,8 @@ def build_parser() -> argparse.ArgumentParser:
     report_parser.add_argument("--output", help="Output path for report JSON", default=None)
     report_parser.add_argument("--markdown-output", help="Output path for report Markdown", default=None)
     report_parser.add_argument("--format", choices=["json", "junit", "ci"], default="json", help="Report output format")
+    report_parser.add_argument("--ci", action="store_true", help="Enable CI mode sidecar outputs and gate-based exit codes")
+    report_parser.add_argument("--exit-on-fail", action="store_true", help="Return quality-gate exit code for CI pipelines")
     report_parser.set_defaults(handler=handle_report)
 
     trends_parser = subparsers.add_parser("trends", help="Analyze trend history and emit trend reports")

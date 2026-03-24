@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Any
+
+from orchestrator.dataset_loader import evaluate_rag_dataset, load_json_dataset
 
 
 def _defect(
@@ -32,21 +33,6 @@ def _safe_execution_rate(executed_cases: int, planned_cases: int) -> float:
     return round(executed_cases / planned_cases, 4)
 
 
-def _load_json_list(path: str | None) -> list[dict[str, Any]]:
-    if not path:
-        return []
-    candidate = Path(path)
-    if not candidate.exists():
-        return []
-    try:
-        payload = json.loads(candidate.read_text(encoding="utf-8"))
-    except Exception:
-        return []
-    if isinstance(payload, list):
-        return [item for item in payload if isinstance(item, dict)]
-    return []
-
-
 def _grounding_signal(response: str, references: list[str]) -> bool:
     if not references:
         return True
@@ -74,8 +60,8 @@ def run_rag_app_smoke(
 ) -> dict[str, Any]:
     logs: list[str] = []
     defects: list[dict[str, Any]] = []
-    corpus_items = _load_json_list(corpus_path)
-    corpus_refs = [str(item.get("id", "")).strip() for item in corpus_items if isinstance(item, dict)]
+    corpus_items = load_json_dataset(corpus_path)
+    corpus_refs = [str(item.get("source", item.get("id", ""))).strip() for item in corpus_items if isinstance(item, dict)]
 
     planned_cases = max(len(eval_cases), 1) + 5
     passed = 0
@@ -130,7 +116,7 @@ def run_rag_app_smoke(
     for index, case in enumerate(cases, start=1):
         expected = str(case.get("expected_contains", "")).strip().lower()
         expected_reference = str(case.get("expected_reference", case.get("expected_citation", ""))).strip().lower()
-        response = str(case.get("mock_response", case.get("prompt", ""))).lower()
+        response = str(case.get("mock_response", case.get("response", case.get("prompt", "")))).lower()
         context_hit = bool(case.get("context_hit", True))
 
         if not context_hit:
@@ -202,6 +188,7 @@ def run_rag_app_smoke(
         passed += 1
         logs.append(f"Case {index} passed grounding/hallucination checks.")
 
+    dataset_summary = evaluate_rag_dataset(cases)
     total_checks = passed + failed + blocked + skipped
     executed_cases = passed + failed + blocked
     status = "failed" if failed > 0 else "blocked" if blocked > 0 and passed == 0 else "passed"
@@ -234,7 +221,7 @@ def run_rag_app_smoke(
             "artifacts": [str(trace_file)] + ([corpus_path] if corpus_path else []),
         },
         "recommendation_notes": [
-            "RAG smoke now checks grounding and rule-based hallucination risk.",
+            "RAG smoke checks grounding and heuristic hallucination signals with dataset-aware references.",
             "Add live retrieval traces and citation evaluators for production gates.",
         ],
         "raw_output": {
@@ -243,5 +230,6 @@ def run_rag_app_smoke(
             "tool_names": tool_names,
             "fallback_strategy": fallback_strategy,
             "corpus_reference_count": len(corpus_refs),
+            "dataset_evaluation_summary": dataset_summary,
         },
     }

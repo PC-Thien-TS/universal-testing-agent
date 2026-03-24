@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Any
 
 import requests
+
+from orchestrator.dataset_loader import compute_classification_metrics, load_json_dataset
 
 
 def _defect(
@@ -34,77 +35,6 @@ def _safe_execution_rate(executed_cases: int, planned_cases: int) -> float:
     return round(executed_cases / planned_cases, 4)
 
 
-def _read_dataset(dataset_path: str | None) -> list[dict[str, Any]]:
-    if not dataset_path:
-        return []
-    path = Path(dataset_path)
-    if not path.exists():
-        return []
-    try:
-        raw = json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
-        return []
-    if isinstance(raw, list):
-        return [item for item in raw if isinstance(item, dict)]
-    return []
-
-
-def _label_from_row(row: dict[str, Any], keys: list[str]) -> str:
-    for key in keys:
-        value = row.get(key)
-        if isinstance(value, str) and value.strip():
-            return value.strip()
-    return ""
-
-
-def _compute_classification_metrics(samples: list[dict[str, Any]], labels: list[str]) -> dict[str, float]:
-    if not samples:
-        return {"accuracy": 0.0, "precision": 0.0, "recall": 0.0, "f1_score": 0.0}
-
-    resolved_labels = [label for label in labels if label]
-    true_values: list[str] = []
-    predicted_values: list[str] = []
-    for row in samples:
-        truth = _label_from_row(row, ["label", "expected", "expected_label", "ground_truth", "target"])
-        predicted = _label_from_row(row, ["predicted", "prediction", "actual", "output"])
-        if not predicted and truth:
-            predicted = truth
-        if truth:
-            true_values.append(truth)
-            predicted_values.append(predicted or "")
-            if truth not in resolved_labels:
-                resolved_labels.append(truth)
-            if predicted and predicted not in resolved_labels:
-                resolved_labels.append(predicted)
-
-    if not true_values:
-        return {"accuracy": 0.0, "precision": 0.0, "recall": 0.0, "f1_score": 0.0}
-
-    correct = sum(1 for t, p in zip(true_values, predicted_values) if t == p)
-    accuracy = correct / len(true_values)
-
-    per_label_precision: list[float] = []
-    per_label_recall: list[float] = []
-    for label in resolved_labels:
-        tp = sum(1 for t, p in zip(true_values, predicted_values) if t == label and p == label)
-        fp = sum(1 for t, p in zip(true_values, predicted_values) if t != label and p == label)
-        fn = sum(1 for t, p in zip(true_values, predicted_values) if t == label and p != label)
-        precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
-        recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
-        per_label_precision.append(precision)
-        per_label_recall.append(recall)
-
-    precision = sum(per_label_precision) / max(len(per_label_precision), 1)
-    recall = sum(per_label_recall) / max(len(per_label_recall), 1)
-    f1 = (2 * precision * recall / (precision + recall)) if (precision + recall) > 0 else 0.0
-    return {
-        "accuracy": round(accuracy, 4),
-        "precision": round(precision, 4),
-        "recall": round(recall, 4),
-        "f1_score": round(f1, 4),
-    }
-
-
 def run_model_evaluation(
     endpoint: str,
     eval_cases: list[dict[str, Any]],
@@ -116,7 +46,7 @@ def run_model_evaluation(
 ) -> dict[str, Any]:
     labels = labels or []
     inline_samples = [item for item in (dataset_samples or []) if isinstance(item, dict)]
-    file_samples = _read_dataset(dataset_path)
+    file_samples = load_json_dataset(dataset_path)
     samples = file_samples or inline_samples
 
     defects: list[dict[str, Any]] = []
@@ -144,7 +74,7 @@ def run_model_evaluation(
             )
         )
 
-    metrics.update(_compute_classification_metrics(samples, labels))
+    metrics.update(compute_classification_metrics(samples, labels))
     metrics["sample_count"] = len(samples)
     metrics["label_count"] = len(labels)
     if metrics["sample_count"] > 0:
@@ -270,7 +200,7 @@ def run_model_evaluation(
             "artifacts": artifacts,
         },
         "recommendation_notes": [
-            "Model evaluation now computes accuracy, precision, recall, and F1.",
+            "Model evaluation computes accuracy, precision, recall, and F1 from dataset-driven samples.",
             "Provide larger labeled datasets to stabilize metric confidence.",
         ],
         "raw_output": {
@@ -278,5 +208,12 @@ def run_model_evaluation(
             "threshold": threshold,
             "metrics": metrics,
             "dataset_path": dataset_path,
+            "dataset_evaluation_summary": {
+                "accuracy": metrics["accuracy"],
+                "precision": metrics["precision"],
+                "recall": metrics["recall"],
+                "f1_score": metrics["f1_score"],
+                "sample_count": metrics["sample_count"],
+            },
         },
     }

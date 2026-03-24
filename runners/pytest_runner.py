@@ -59,14 +59,24 @@ def run_api_pytest(
     auth: dict[str, Any] | None = None,
     required_fields: dict[str, list[str]] | None = None,
     negative_cases: list[dict[str, Any]] | None = None,
+    headers: dict[str, str] | None = None,
+    environment_timeouts: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     _ = pytest_args  # retained for backward-compatible config signatures
     logs: list[str] = []
     defects: list[dict[str, Any]] = []
 
     auth = auth or {}
+    headers = headers or {}
+    custom_headers = {str(key): str(value) for key, value in headers.items()}
+    environment_timeouts = environment_timeouts or {}
     required_fields = required_fields or {}
     negative_cases = negative_cases or []
+    raw_timeout = environment_timeouts.get("api_s", environment_timeouts.get("api", timeout_s))
+    try:
+        effective_timeout = int(raw_timeout)
+    except Exception:
+        effective_timeout = int(timeout_s)
     normalized_endpoints = [_normalize_endpoint(item) for item in (endpoints or ["/"])]
     planned_cases = max(len(normalized_endpoints) + len(negative_cases), 1)
 
@@ -77,8 +87,9 @@ def run_api_pytest(
 
     if not base_url:
         logs.append("No base_url provided; deterministic API simulation mode enabled.")
-        headers = _build_auth_headers(auth)
-        logs.append(f"Auth simulation headers: {headers}")
+        simulated_headers = _build_auth_headers(auth)
+        simulated_headers.update(custom_headers)
+        logs.append(f"Auth simulation headers: {simulated_headers}")
 
         for endpoint, expected_status in normalized_endpoints:
             if expected_status >= 400:
@@ -146,13 +157,15 @@ def run_api_pytest(
             "raw_output": {"simulated": True, "endpoints": [item[0] for item in normalized_endpoints]},
         }
 
-    headers = _build_auth_headers(auth)
     session = requests.Session()
-    session.headers.update(headers)
+    auth_headers = _build_auth_headers(auth)
+    session.headers.update(auth_headers)
+    if custom_headers:
+        session.headers.update(custom_headers)
     for endpoint, expected_status in normalized_endpoints:
         url = urljoin(base_url.rstrip("/") + "/", endpoint.lstrip("/"))
         try:
-            response = session.get(url, timeout=max(timeout_s, 1))
+            response = session.get(url, timeout=max(effective_timeout, 1))
             logs.append(f"GET {url} -> {response.status_code} (expected {expected_status})")
             if response.status_code != expected_status:
                 failed += 1
@@ -223,7 +236,7 @@ def run_api_pytest(
         payload = case.get("payload")
         url = urljoin(base_url.rstrip("/") + "/", endpoint.lstrip("/"))
         try:
-            response = session.request(method, url, params=query, json=payload, timeout=max(timeout_s, 1))
+            response = session.request(method, url, params=query, json=payload, timeout=max(effective_timeout, 1))
             logs.append(f"{method} {url} negative-case -> {response.status_code} (expected {expected_status})")
             if response.status_code == expected_status:
                 passed += 1
@@ -294,5 +307,7 @@ def run_api_pytest(
             "base_url": base_url,
             "endpoints": [item[0] for item in normalized_endpoints],
             "auth_type": str(auth.get("type", "none")),
+            "headers_applied": sorted(list(custom_headers.keys())),
+            "effective_timeout_s": effective_timeout,
         },
     }

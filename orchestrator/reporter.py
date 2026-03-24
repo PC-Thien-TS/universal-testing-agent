@@ -9,6 +9,7 @@ from pydantic import BaseModel
 
 from orchestrator.config import RuntimeConfig, load_runtime_config
 from orchestrator.history import load_history_records
+from orchestrator.history_analyzer import analyze_history_intelligence
 from orchestrator.models import (
     ComparisonResult,
     ContractValidationResult,
@@ -51,6 +52,8 @@ def _existing_artifact_references(envelope: ExecutionEnvelope, config: RuntimeCo
         Path(config.paths.latest_ci_summary_file),
         Path(config.paths.latest_quality_gates_file),
         Path(config.paths.latest_trends_file),
+        Path(config.paths.latest_history_intelligence_file),
+        Path(config.paths.latest_history_intelligence_markdown_file),
         Path(config.paths.latest_contract_validation_file),
         Path(config.paths.latest_compare_file),
         Path(config.paths.latest_coverage_catalog_file),
@@ -60,6 +63,29 @@ def _existing_artifact_references(envelope: ExecutionEnvelope, config: RuntimeCo
         if candidate.exists():
             references.append(str(candidate))
     return list(dict.fromkeys(references))
+
+
+def _environment_summary(envelope: ExecutionEnvelope) -> dict[str, object]:
+    metadata = envelope.metadata if isinstance(envelope.metadata, dict) else {}
+    raw_env = metadata.get("environment")
+    env = raw_env if isinstance(raw_env, dict) else {}
+    summary: dict[str, object] = {
+        "type": metadata.get("environment_type", env.get("type", "local")),
+        "base_url": metadata.get("environment_base_url", env.get("base_url")),
+        "auth_configured": bool(env.get("auth")),
+        "header_count": len(env.get("headers", {})) if isinstance(env.get("headers"), dict) else 0,
+        "timeout_keys": sorted(env.get("timeouts", {}).keys()) if isinstance(env.get("timeouts"), dict) else [],
+        "notes": env.get("notes"),
+    }
+    return summary
+
+
+def _dataset_evaluation_summary(envelope: ExecutionEnvelope) -> dict[str, object]:
+    raw_output = envelope.raw_output if isinstance(envelope.raw_output, dict) else {}
+    candidate = raw_output.get("dataset_evaluation_summary")
+    if isinstance(candidate, dict):
+        return candidate
+    return {}
 
 
 def generate_report(envelope: ExecutionEnvelope, config: RuntimeConfig | None = None) -> StandardReport:
@@ -186,10 +212,19 @@ def generate_report(envelope: ExecutionEnvelope, config: RuntimeConfig | None = 
         regression_signals.extend(comparison_summary.regression_signals)
     if trend_summary and trend_summary.overall_direction == "degrading":
         regression_signals.append("Trend analysis indicates degrading overall direction.")
-    regression_signals = list(dict.fromkeys(regression_signals))
 
     history_records = load_history_records(runtime_config.paths.history_dir)
+    history_intelligence = analyze_history_intelligence(history_records)
     flaky_note = flaky_suspicion_from_history(history_records)
+    if history_intelligence.regression_detected:
+        regression_signals.append("History intelligence detected a potential regression in recent runs.")
+    regression_signals = list(dict.fromkeys(regression_signals))
+
+    flaky_summary = (
+        f"{history_intelligence.flaky_classification} (stability_score={history_intelligence.stability_score})"
+        if history_intelligence.runs_analyzed > 0
+        else None
+    )
     if fallback_execution_note:
         known_gaps.append(fallback_execution_note)
         known_gaps = list(dict.fromkeys(known_gaps))
@@ -202,7 +237,10 @@ def generate_report(envelope: ExecutionEnvelope, config: RuntimeConfig | None = 
                 "used": capability in capability_path_used,
             }
 
-    return StandardReport(
+    environment_summary = _environment_summary(envelope)
+    dataset_evaluation_summary = _dataset_evaluation_summary(envelope)
+
+    report = StandardReport(
         run_id=envelope.run_id,
         project_name=envelope.project_name,
         project_type=envelope.project_type,
@@ -229,6 +267,12 @@ def generate_report(envelope: ExecutionEnvelope, config: RuntimeConfig | None = 
         policy=policy,
         quality_gates=quality_gates,
         release_gate_summary=quality_gates.gate_status.upper(),
+        environment_summary=environment_summary,
+        ci_summary={},
+        history_intelligence=history_intelligence,
+        regression_detected=history_intelligence.regression_detected or bool(regression_signals),
+        flaky_summary=flaky_summary,
+        dataset_evaluation_summary=dataset_evaluation_summary,
         known_gaps=known_gaps,
         assumptions=assumptions,
         artifact_references=artifact_references,
@@ -244,6 +288,8 @@ def generate_report(envelope: ExecutionEnvelope, config: RuntimeConfig | None = 
         flaky_suspicion_note=flaky_note,
         generated_at=utc_now_iso(),
     )
+    report.ci_summary = build_ci_summary(report)
+    return report
 
 
 def save_report(report: StandardReport, output_path: str | Path) -> Path:
@@ -333,6 +379,29 @@ def render_markdown_report(report: StandardReport) -> str:
             f"- Blocking Issues: {', '.join(report.quality_gates.blocking_issues) if report.quality_gates.blocking_issues else '(none)'}"
         )
 
+    environment_section = _format_list(
+        [f"{key}: {value}" for key, value in report.environment_summary.items() if value is not None]
+    )
+    ci_summary_section = _format_list([f"{key}: {value}" for key, value in report.ci_summary.items()])
+
+    history_intelligence_section = "- (not available)"
+    if report.history_intelligence is not None:
+        history_intelligence_section = (
+            f"- Runs analyzed: `{report.history_intelligence.runs_analyzed}`\n"
+            f"- Trend: `{report.history_intelligence.trend}`\n"
+            f"- Regression detected: `{report.history_intelligence.regression_detected}`\n"
+            f"- Improvement detected: `{report.history_intelligence.improvement_detected}`\n"
+            f"- Stability score: `{report.history_intelligence.stability_score}`\n"
+            f"- Failing areas: {', '.join(report.history_intelligence.failing_areas) if report.history_intelligence.failing_areas else '(none)'}\n"
+            f"- Release readiness trend: `{report.history_intelligence.release_readiness_trend}`\n"
+            f"- Flaky classification: `{report.history_intelligence.flaky_classification}`\n"
+            f"- Gate instability: `{report.history_intelligence.gate_instability}`"
+        )
+
+    dataset_evaluation_section = _format_list(
+        [f"{key}: {value}" for key, value in report.dataset_evaluation_summary.items()]
+    )
+
     return f"""# Universal Testing Agent Report
 
 ## Project Summary
@@ -344,6 +413,9 @@ def render_markdown_report(report: StandardReport) -> str:
 - Started: `{report.started_at}`
 - Finished: `{report.finished_at}`
 - Duration (s): `{report.duration_seconds}`
+
+## Environment Summary
+{environment_section}
 
 ## Execution Summary
 - Total Checks: `{report.summary.total_checks}`
@@ -396,6 +468,9 @@ def render_markdown_report(report: StandardReport) -> str:
 ## Release Gate Summary
 - Gate: `{report.release_gate_summary}`
 
+## CI Summary
+{ci_summary_section}
+
 ## Capabilities Used
 {_format_list(report.capabilities_used)}
 
@@ -429,6 +504,9 @@ def render_markdown_report(report: StandardReport) -> str:
 ## Trend Summary
 {trend_section}
 
+## History Intelligence
+{history_intelligence_section}
+
 ## Contract Validation Summary
 {contract_section}
 
@@ -440,6 +518,12 @@ def render_markdown_report(report: StandardReport) -> str:
 
 ## Flaky Suspicion
 - {report.flaky_suspicion_note or "(none)"}
+
+## Flaky Summary
+- {report.flaky_summary or "(none)"}
+
+## Dataset Evaluation Summary
+{dataset_evaluation_section}
 
 ## Known Gaps
 {_format_list(report.known_gaps)}
@@ -540,17 +624,30 @@ def save_junit_report(report: StandardReport, output_path: str | Path) -> Path:
 
 def build_ci_summary(report: StandardReport) -> dict[str, object]:
     gate_status = report.quality_gates.gate_status if report.quality_gates else "warning"
+    gate_exit_code = 2 if gate_status == "fail" else 1 if gate_status == "warning" else 0
     return {
         "run_id": report.run_id,
         "project_name": report.project_name,
         "project_type": report.project_type,
         "status": report.status,
         "gate_status": gate_status,
+        "exit_code": gate_exit_code,
         "release_ready": report.recommendation.release_ready,
         "summary": report.summary.model_dump(mode="json"),
         "coverage": report.coverage.model_dump(mode="json"),
         "defects": report.defects.model_dump(mode="json"),
+        "defect_details": [item.model_dump(mode="json") for item in report.defect_details],
+        "environment_summary": report.environment_summary,
+        "history_intelligence": report.history_intelligence.model_dump(mode="json")
+        if report.history_intelligence
+        else None,
+        "regression_detected": report.regression_detected,
+        "flaky_summary": report.flaky_summary,
+        "dataset_evaluation_summary": report.dataset_evaluation_summary,
+        "quality_gates": report.quality_gates.model_dump(mode="json") if report.quality_gates else None,
         "plugin": report.plugin.model_dump(mode="json") if report.plugin else None,
+        "plugin_validation": report.plugin_validation.model_dump(mode="json") if report.plugin_validation else None,
+        "plugin_onboarding": report.plugin_onboarding.model_dump(mode="json") if report.plugin_onboarding else None,
         "support_level": report.support_level,
         "fallback_execution_note": report.fallback_execution_note,
         "generated_at": report.generated_at,

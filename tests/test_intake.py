@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from orchestrator.intake import load_manifest
+from orchestrator.intake import load_manifest, normalize_input
 
 
 def test_load_manifest_valid_sample() -> None:
@@ -17,6 +17,17 @@ def test_load_manifest_valid_api_and_model_samples() -> None:
     model_manifest = load_manifest(Path("manifests/samples/model_basalt.yaml"))
     assert api_manifest.project_type == "api"
     assert model_manifest.project_type == "model"
+
+
+def test_environment_config_supports_type_headers_timeouts_notes() -> None:
+    manifest = load_manifest(Path("manifests/samples/staging_api_verify_store.yaml"))
+    normalized = normalize_input(manifest, Path("manifests/samples/staging_api_verify_store.yaml"))
+    assert normalized.environment_config.type == "staging"
+    assert normalized.environment_config.base_url == ""
+    assert normalized.environment_config.auth.get("type") == "bearer"
+    assert normalized.environment_config.headers.get("X-Client") == "uta-ci"
+    assert int(normalized.environment_config.timeouts.get("api_s", 0)) == 2
+    assert "Offline-safe smoke mode" in str(normalized.environment_config.notes)
 
 
 def test_load_manifest_v2_mobile_and_llm_app_samples() -> None:

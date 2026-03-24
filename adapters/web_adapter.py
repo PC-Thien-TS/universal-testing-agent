@@ -45,15 +45,24 @@ class WebAdapter(BaseAdapter):
         if not isinstance(navigation_paths, list):
             navigation_paths = []
 
+        environment_headers = intake.environment_config.headers or intake.environment.get("headers", {})
+        env_timeouts = intake.environment_config.timeouts or intake.environment.get("timeouts", {})
+        raw_timeout = env_timeouts.get("web_ms", env_timeouts.get("web", self.config.timeouts.web_ms))
+        try:
+            timeout_ms = int(raw_timeout)
+        except Exception:
+            timeout_ms = int(self.config.timeouts.web_ms)
+
         runner_result = run_web_smoke(
             url=intake.target or "",
             auth=intake.auth,
-            timeout_ms=self.config.timeouts.web_ms,
+            timeout_ms=timeout_ms,
             screenshot_dir=self.config.paths.evidence_dir,
             browser=self.config.runners.web.browser,
             headless=self.config.runners.web.headless,
             selectors=selectors,
             navigation_paths=[str(item) for item in navigation_paths if str(item).strip()],
+            headers=environment_headers if isinstance(environment_headers, dict) else {},
         )
         return ExecutionResult(
             status=runner_result.get("status", "failed"),

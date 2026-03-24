@@ -19,6 +19,8 @@ paths:
   history_index_file: results/history/history_index.json
   latest_trends_file: results/trends_latest.json
   latest_trends_markdown_file: results/trends_latest.md
+  latest_history_intelligence_file: results/history_intelligence_latest.json
+  latest_history_intelligence_markdown_file: results/history_intelligence_latest.md
   latest_contract_validation_file: results/contract_validation_latest.json
   latest_contract_validation_markdown_file: results/contract_validation_latest.md
   latest_compare_file: results/compare_latest.json

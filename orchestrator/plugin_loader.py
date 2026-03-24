@@ -101,7 +101,7 @@ def validate_plugin(plugin: AdapterPlugin) -> PluginValidationResult:
     if not plugin.supported_capabilities:
         errors.append("supported_capabilities must not be empty.")
     if not SEMVER_PATTERN.match(plugin.plugin_version):
-        errors.append("plugin_version must follow semantic versioning (e.g. 1.8.0).")
+        errors.append("plugin_version must follow semantic versioning (e.g. 1.9.0).")
     if not plugin.author.strip():
         errors.append("author is required.")
     if not isinstance(plugin.dependencies, list):
