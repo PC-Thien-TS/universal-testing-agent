@@ -27,6 +27,7 @@
     "medium": 0,
     "low": 0
   },
+  "defect_details": [],
   "evidence": {
     "logs": [],
     "screenshots": [],
@@ -37,17 +38,28 @@
     "release_ready": false,
     "notes": []
   },
+  "plugin": null,
+  "plugin_validation": null,
+  "plugin_onboarding": null,
+  "support_level": null,
+  "coverage_catalog_reference": null,
+  "capability_path_used": [],
   "policy": {
     "release_ready": false,
     "verdict": "fail",
     "reasons": [],
     "evaluated_rules": {}
   },
+  "quality_gates": null,
   "release_gate_summary": "FAIL",
   "known_gaps": [],
   "assumptions": [],
   "artifact_references": [],
   "run_metadata": null,
+  "capabilities_used": [],
+  "capability_coverage_summary": {},
+  "taxonomy_coverage_focus": [],
+  "fallback_execution_note": null,
   "trend_summary": null,
   "contract_validation_summary": null,
   "comparison_summary": null,

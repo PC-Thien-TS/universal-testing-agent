@@ -156,6 +156,7 @@ def execute_pipeline(
         summary=execution.summary,
         coverage=execution.coverage,
         defects=defects,
+        defect_details=execution.defect_details,
         evidence=execution.evidence,
         recommendation=recommendation,
         policy=None,

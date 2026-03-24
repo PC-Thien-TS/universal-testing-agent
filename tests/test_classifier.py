@@ -48,3 +48,47 @@ def test_classifier_detects_model_from_endpoint() -> None:
 def test_classifier_detects_model_from_labels_hint() -> None:
     intake = _intake(labels=["safe", "unsafe"], request={"goal": "evaluation"})
     assert classify_product(intake) == "model"
+
+
+def test_classifier_detects_mobile_from_artifact_hint() -> None:
+    intake = _intake(
+        project_type="auto",
+        artifacts=[Artifact(name="android-build", type="apk", path="builds/app.apk")],
+        request={"permissions": ["camera"]},
+    )
+    assert classify_product(intake) == "mobile"
+
+
+def test_classifier_detects_llm_app_from_prompt_tool_hints() -> None:
+    intake = _intake(
+        project_type="auto",
+        request={"eval_cases": [{"prompt": "help"}], "tools": ["search"], "fallback_strategy": "safe-default"},
+        labels=["safe"],
+    )
+    assert classify_product(intake) == "llm_app"
+
+
+def test_classifier_detects_rag_app_from_retrieval_citation_hints() -> None:
+    intake = _intake(
+        project_type="auto",
+        request={"goal": "rag evaluation", "require_citations": True, "tools": ["vector_search"]},
+        artifacts=[Artifact(name="rag-corpus", type="corpus", path="rag_corpus.json")],
+    )
+    assert classify_product(intake) == "rag_app"
+
+
+def test_classifier_detects_workflow_from_trigger_transition_hints() -> None:
+    intake = _intake(
+        project_type="auto",
+        request={"trigger_payload": {"x": 1}, "transitions": [{"from": "a", "to": "b"}], "retry_policy": {"max": 1}},
+    )
+    assert classify_product(intake) == "workflow"
+
+
+def test_classifier_detects_data_pipeline_from_schema_batch_hints() -> None:
+    intake = _intake(
+        project_type="auto",
+        request={"expected_columns": ["id"], "transformations": ["normalize"]},
+        artifacts=[Artifact(name="schema", type="schema", path="schema.json"), Artifact(name="batch", type="batch", path="batch.json")],
+    )
+    assert classify_product(intake) == "data_pipeline"

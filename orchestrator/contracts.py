@@ -22,8 +22,10 @@ REQUIRED_RESULT_FIELDS = {
     "summary",
     "coverage",
     "defects",
+    "defect_details",
     "evidence",
     "recommendation",
+    "quality_gates",
 }
 
 
@@ -57,7 +59,72 @@ def _validate_model_artifacts(labels: list[str], artifacts: list[dict[str, Any]]
     return False, "Model dataset/sample artifact is missing"
 
 
-def validate_contracts(manifest_path: str | Path, result_path: str | Path | None = None) -> ContractValidationResult:
+def _validate_mobile_contract(manifest: Any) -> tuple[bool, str]:
+    app_id = manifest.request.get("app_id") or manifest.environment.get("app_id")
+    has_mobile_artifact = any(
+        any(token in " ".join(str(artifact.get(key, "")) for key in ("name", "type", "path")).lower() for token in ("apk", "ipa", "mobile", "android", "ios"))
+        for artifact in [item.model_dump(mode="json") for item in manifest.artifacts]
+    )
+    has_entry_points = bool(manifest.entry_points or manifest.request.get("entry_points"))
+    if app_id or has_mobile_artifact:
+        if has_entry_points:
+            return True, "Mobile app identifiers/artifacts and entry points are present"
+        return True, "Mobile app identifier/artifact detected (entry points optional in skeleton mode)"
+    return False, "Missing mobile app_id or mobile artifact hints"
+
+
+def _validate_llm_app_contract(manifest: Any) -> tuple[bool, str]:
+    has_eval_cases = bool(manifest.request.get("eval_cases"))
+    has_tools_or_fallback = bool(manifest.request.get("tools")) or bool(manifest.request.get("fallback_strategy"))
+    has_dataset = any(
+        "dataset" in " ".join(str(artifact.get(key, "")) for key in ("name", "type", "path")).lower()
+        for artifact in [item.model_dump(mode="json") for item in manifest.artifacts]
+    )
+    if has_eval_cases and has_tools_or_fallback and (has_dataset or bool(manifest.labels)):
+        return True, "llm_app eval cases, safety/tool/fallback, and dataset/labels signals are present"
+    return False, "llm_app contract missing eval cases or safety/tool/fallback or dataset/labels signals"
+
+
+def _validate_rag_app_contract(manifest: Any) -> tuple[bool, str]:
+    has_eval_cases = bool(manifest.request.get("eval_cases"))
+    has_retrieval_signal = bool(manifest.request.get("corpus_path")) or any(
+        "corpus" in " ".join(str(artifact.get(key, "")) for key in ("name", "type", "path")).lower()
+        or "retrieval" in " ".join(str(artifact.get(key, "")) for key in ("name", "type", "path")).lower()
+        for artifact in [item.model_dump(mode="json") for item in manifest.artifacts]
+    )
+    if has_eval_cases and has_retrieval_signal:
+        return True, "rag_app contract includes eval cases and retrieval corpus signals"
+    return False, "rag_app contract missing eval cases or retrieval corpus signals"
+
+
+def _validate_workflow_contract(manifest: Any) -> tuple[bool, str]:
+    has_steps = bool(manifest.request.get("steps"))
+    has_trigger = bool(manifest.request.get("trigger_payload"))
+    if has_steps and has_trigger:
+        return True, "workflow contract includes trigger payload and step chain"
+    return False, "workflow contract missing trigger payload or step definitions"
+
+
+def _validate_data_pipeline_contract(manifest: Any) -> tuple[bool, str]:
+    has_schema = bool(manifest.request.get("schema_path")) or any(
+        "schema" in " ".join(str(artifact.get(key, "")) for key in ("name", "type", "path")).lower()
+        for artifact in [item.model_dump(mode="json") for item in manifest.artifacts]
+    )
+    has_batch = bool(manifest.request.get("batch_path")) or any(
+        "batch" in " ".join(str(artifact.get(key, "")) for key in ("name", "type", "path")).lower()
+        for artifact in [item.model_dump(mode="json") for item in manifest.artifacts]
+    )
+    if has_schema and has_batch:
+        return True, "data_pipeline contract includes schema and batch signals"
+    return False, "data_pipeline contract missing schema or batch signals"
+
+
+def validate_contracts(
+    manifest_path: str | Path,
+    result_path: str | Path | None = None,
+    *,
+    check_result_contract: bool = True,
+) -> ContractValidationResult:
     manifest = load_manifest(manifest_path)
     checks: dict[str, dict[str, Any]] = {}
     reasons: list[str] = []
@@ -77,6 +144,31 @@ def validate_contracts(manifest_path: str | Path, result_path: str | Path | None
         checks["model_contract_basics"] = {"passed": passed, "details": details}
         if not passed:
             reasons.append(details)
+    elif manifest.project_type == "mobile":
+        passed, details = _validate_mobile_contract(manifest)
+        checks["mobile_contract_basics"] = {"passed": passed, "details": details}
+        if not passed:
+            reasons.append(details)
+    elif manifest.project_type == "llm_app":
+        passed, details = _validate_llm_app_contract(manifest)
+        checks["llm_app_contract_basics"] = {"passed": passed, "details": details}
+        if not passed:
+            reasons.append(details)
+    elif manifest.project_type == "rag_app":
+        passed, details = _validate_rag_app_contract(manifest)
+        checks["rag_app_contract_basics"] = {"passed": passed, "details": details}
+        if not passed:
+            reasons.append(details)
+    elif manifest.project_type == "workflow":
+        passed, details = _validate_workflow_contract(manifest)
+        checks["workflow_contract_basics"] = {"passed": passed, "details": details}
+        if not passed:
+            reasons.append(details)
+    elif manifest.project_type == "data_pipeline":
+        passed, details = _validate_data_pipeline_contract(manifest)
+        checks["data_pipeline_contract_basics"] = {"passed": passed, "details": details}
+        if not passed:
+            reasons.append(details)
     else:
         has_web_target = bool(manifest.url or manifest.environment.get("base_url") or manifest.feature)
         checks["web_contract_basics"] = {
@@ -87,7 +179,9 @@ def validate_contracts(manifest_path: str | Path, result_path: str | Path | None
             reasons.append("Missing URL/base_url/feature indicators")
 
     resolved_result_path = Path(result_path) if result_path else Path("results/latest.json")
-    if resolved_result_path.exists():
+    if not check_result_contract:
+        checks["result_contract_basics"] = {"passed": True, "details": "Runtime result contract check skipped"}
+    elif resolved_result_path.exists():
         try:
             result_payload = json.loads(resolved_result_path.read_text(encoding="utf-8"))
             missing = sorted(REQUIRED_RESULT_FIELDS - set(result_payload.keys()))

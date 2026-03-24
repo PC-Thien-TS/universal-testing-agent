@@ -22,13 +22,20 @@ class Artifact(UtaModel):
 class IntakeManifest(UtaModel):
     name: str = "unnamed-project"
     project_type: str = "auto"
+    project_subtype: str | None = None
     url: str | None = None
     labels: list[str] = Field(default_factory=list)
     artifacts: list[Artifact] = Field(default_factory=list)
+    interfaces: list[dict[str, Any]] = Field(default_factory=list)
+    entry_points: list[dict[str, Any]] = Field(default_factory=list)
     environment: dict[str, Any] = Field(default_factory=dict)
     request: dict[str, Any] = Field(default_factory=dict)
     acceptance: dict[str, Any] = Field(default_factory=dict)
     outputs: dict[str, Any] = Field(default_factory=dict)
+    oracle: dict[str, Any] = Field(default_factory=dict)
+    baseline: dict[str, Any] = Field(default_factory=dict)
+    dependencies: list[str] | dict[str, Any] = Field(default_factory=list)
+    dimensions: list[str] | dict[str, Any] = Field(default_factory=list)
     auth: dict[str, Any] = Field(default_factory=dict)
     feature: str | None = None
     constraints: list[str] | dict[str, Any] = Field(default_factory=list)
@@ -40,15 +47,22 @@ class NormalizedIntake(UtaModel):
     manifest_path: str
     name: str
     project_type: str
+    project_subtype: str | None = None
     url: str | None = None
     target: str | None = None
     feature: str | None = None
     labels: list[str] = Field(default_factory=list)
     artifacts: list[Artifact] = Field(default_factory=list)
+    interfaces: list[dict[str, Any]] = Field(default_factory=list)
+    entry_points: list[dict[str, Any]] = Field(default_factory=list)
     environment: dict[str, Any] = Field(default_factory=dict)
     request: dict[str, Any] = Field(default_factory=dict)
     acceptance: dict[str, Any] = Field(default_factory=dict)
     outputs: dict[str, Any] = Field(default_factory=dict)
+    oracle: dict[str, Any] = Field(default_factory=dict)
+    baseline: dict[str, Any] = Field(default_factory=dict)
+    dependencies: list[str] | dict[str, Any] = Field(default_factory=list)
+    dimensions: list[str] | dict[str, Any] = Field(default_factory=list)
     auth: dict[str, Any] = Field(default_factory=dict)
     constraints: list[str] | dict[str, Any] = Field(default_factory=list)
     api: dict[str, Any] = Field(default_factory=dict)
@@ -59,7 +73,10 @@ class StrategyPlan(UtaModel):
     scope: list[str] = Field(default_factory=list)
     risks: list[str] = Field(default_factory=list)
     coverage: dict[str, Any] = Field(default_factory=dict)
+    coverage_focus: list[str] = Field(default_factory=list)
     execution_priorities: list[str] = Field(default_factory=list)
+    capability_expectations: list[str] = Field(default_factory=list)
+    taxonomy_dimensions: list[str] = Field(default_factory=list)
     constraints: list[str] = Field(default_factory=list)
     endpoint_matrix_summary: list[dict[str, Any]] = Field(default_factory=list)
     evaluation_dimensions: list[str] = Field(default_factory=list)
@@ -101,6 +118,9 @@ class CoverageStats(UtaModel):
 class DefectDetail(UtaModel):
     id: str
     severity: Literal["blocker", "critical", "high", "medium", "low"] = "medium"
+    category: Literal["functional", "contract", "performance", "data", "model"] = "functional"
+    reproducibility: Literal["deterministic", "flaky", "unknown"] = "deterministic"
+    confidence_score: float = 1.0
     message: str
     details: dict[str, Any] = Field(default_factory=dict)
 
@@ -132,6 +152,14 @@ class PolicyEvaluation(UtaModel):
     evaluated_rules: dict[str, Any] = Field(default_factory=dict)
 
 
+class QualityGateResult(UtaModel):
+    gate_status: Literal["pass", "fail", "warning"] = "warning"
+    gate_reasons: list[str] = Field(default_factory=list)
+    blocking_issues: list[str] = Field(default_factory=list)
+    recommendation: str = "Review quality gate findings."
+    evaluated_rules: dict[str, Any] = Field(default_factory=dict)
+
+
 class RunMetadata(UtaModel):
     run_id: str
     command: str
@@ -143,6 +171,60 @@ class RunMetadata(UtaModel):
     duration_seconds: float
     status: str
     artifact_dir: str
+
+
+class PluginValidationSummary(UtaModel):
+    plugin_name: str | None = None
+    valid: bool = False
+    errors: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+    adapter_method_coverage: list[str] = Field(default_factory=list)
+    capability_completeness: float = 0.0
+    missing_recommended_capabilities: list[str] = Field(default_factory=list)
+    support_level: str = "partial"
+    fallback_support_note: str | None = None
+
+
+class PluginReportContext(UtaModel):
+    plugin_name: str
+    plugin_version: str
+    author: str | None = None
+    dependencies: list[str] = Field(default_factory=list)
+    compatibility: dict[str, Any] = Field(default_factory=dict)
+    supported_product_types: list[str] = Field(default_factory=list)
+    supported_capabilities: list[str] = Field(default_factory=list)
+    fallback_mode: str = "native"
+    adapter_target: str
+    health_metadata: dict[str, Any] = Field(default_factory=dict)
+    discovered_from: str = "builtin"
+
+
+class PluginOnboardingResult(UtaModel):
+    plugin_name: str
+    onboarding_status: str = "partial"
+    completeness_score: float = 0.0
+    missing_items: list[str] = Field(default_factory=list)
+    notes: list[str] = Field(default_factory=list)
+
+
+class CoverageCatalogEntry(UtaModel):
+    plugin_name: str
+    plugin_version: str
+    author: str | None = None
+    dependencies: list[str] = Field(default_factory=list)
+    compatibility: dict[str, Any] = Field(default_factory=dict)
+    product_types: list[str] = Field(default_factory=list)
+    capabilities: list[str] = Field(default_factory=list)
+    support_level: str = "partial"
+    fallback_mode: str = "native"
+    fallback_note: str | None = None
+    missing_recommended_capabilities: list[str] = Field(default_factory=list)
+    onboarding_status: str = "partial"
+
+
+class CoverageCatalogSummary(UtaModel):
+    generated_at: str
+    entries: list[CoverageCatalogEntry] = Field(default_factory=list)
 
 
 class HistoryRecord(UtaModel):
@@ -208,9 +290,16 @@ class ExecutionEnvelope(UtaModel):
     summary: SummaryStats
     coverage: CoverageStats
     defects: DefectSummary
+    defect_details: list[DefectDetail] = Field(default_factory=list)
     evidence: EvidenceBundle
     recommendation: Recommendation
+    plugin: PluginReportContext | None = None
+    plugin_validation: PluginValidationSummary | None = None
+    plugin_onboarding: PluginOnboardingResult | None = None
+    support_level: str | None = None
+    capability_path_used: list[str] = Field(default_factory=list)
     policy: PolicyEvaluation | None = None
+    quality_gates: QualityGateResult | None = None
     run_metadata: RunMetadata | None = None
     generated_artifacts: list[str] = Field(default_factory=list)
     known_gaps: list[str] = Field(default_factory=list)
@@ -231,14 +320,26 @@ class StandardReport(UtaModel):
     summary: SummaryStats
     coverage: CoverageStats
     defects: DefectSummary
+    defect_details: list[DefectDetail] = Field(default_factory=list)
     evidence: EvidenceBundle
     recommendation: Recommendation
+    plugin: PluginReportContext | None = None
+    plugin_validation: PluginValidationSummary | None = None
+    plugin_onboarding: PluginOnboardingResult | None = None
+    support_level: str | None = None
+    coverage_catalog_reference: str | None = None
+    capability_path_used: list[str] = Field(default_factory=list)
     policy: PolicyEvaluation
+    quality_gates: QualityGateResult | None = None
     release_gate_summary: str
     known_gaps: list[str] = Field(default_factory=list)
     assumptions: list[str] = Field(default_factory=list)
     artifact_references: list[str] = Field(default_factory=list)
     run_metadata: RunMetadata | None = None
+    capabilities_used: list[str] = Field(default_factory=list)
+    capability_coverage_summary: dict[str, Any] = Field(default_factory=dict)
+    taxonomy_coverage_focus: list[str] = Field(default_factory=list)
+    fallback_execution_note: str | None = None
     trend_summary: TrendAnalysis | None = None
     contract_validation_summary: ContractValidationResult | None = None
     comparison_summary: ComparisonResult | None = None
