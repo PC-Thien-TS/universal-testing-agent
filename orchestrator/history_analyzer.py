@@ -19,6 +19,8 @@ def _direction(first: float, last: float) -> str:
 def _release_readiness_trend(ordered: list[HistoryRecord]) -> str:
     if not ordered:
         return "stable"
+    if len(ordered) < 2:
+        return "stable"
     midpoint = max(len(ordered) // 2, 1)
     first_half = ordered[:midpoint]
     second_half = ordered[midpoint:]

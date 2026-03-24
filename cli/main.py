@@ -21,6 +21,8 @@ from orchestrator.plugin_onboarding import evaluate_plugin_onboarding, evaluate_
 from orchestrator.plugin_packaging import export_plugin_package, import_plugin_package
 from orchestrator.quality_gates import evaluate_quality_gates
 from orchestrator.registry import get_registry
+from orchestrator.compatibility import analyze_project_compatibility
+from orchestrator.project_registry import get_project as get_registered_project
 from orchestrator.reporter import (
     generate_report,
     save_ci_summary,
@@ -35,8 +37,11 @@ from orchestrator.router import (
     adapter_plugin_inspection,
     select_adapter,
 )
-from orchestrator.models import PluginReportContext, PluginValidationSummary
+from orchestrator.models import EnvironmentConfig, PluginReportContext, PluginValidationSummary, RunRegistryRecord
+from orchestrator.project_service import default_project_service
+from orchestrator.platform_summary import summarize_platform_state
 from orchestrator.trends import analyze_trends, save_trends
+from orchestrator.run_registry import add_run_record
 
 
 def _resolve_output_path(explicit_path: str | None, default_path: str) -> Path:
@@ -72,6 +77,31 @@ def _persist_history_from_report(report: Any, config: RuntimeConfig) -> str:
     record = record_from_report(report)
     record_path = persist_history_record(record, config.paths.history_dir, config.paths.history_index_file)
     return str(record_path)
+
+
+def _project_service(config: RuntimeConfig):
+    return default_project_service(config.paths.project_registry_file, config.paths.run_registry_file)
+
+
+def _project_paths(config: RuntimeConfig, project_id: str) -> dict[str, Path]:
+    root = Path(config.paths.projects_dir) / project_id
+    root.mkdir(parents=True, exist_ok=True)
+    return {
+        "root": root,
+        "result": root / "latest.json",
+        "report": root / "report_latest.json",
+        "report_md": root / "report_latest.md",
+        "ci": root / "ci_summary_latest.json",
+        "junit": root / "report_latest.junit.xml",
+        "quality_gates": root / "quality_gates_latest.json",
+        "runs_dir": root / "runs",
+    }
+
+
+def _parse_tags(raw_tags: str | None) -> list[str]:
+    if not raw_tags:
+        return []
+    return [item.strip() for item in raw_tags.split(",") if item.strip()]
 
 
 def handle_validate_manifest(args: argparse.Namespace) -> int:
@@ -404,6 +434,7 @@ def handle_report(args: argparse.Namespace) -> int:
                 if report.plugin_onboarding
                 else None,
                 "support_level": report.support_level,
+                "project_id": report.project_id,
                 "environment_summary": report.environment_summary,
                 "history_intelligence": report.history_intelligence.model_dump(mode="json")
                 if report.history_intelligence
@@ -870,6 +901,475 @@ def handle_import_plugin(args: argparse.Namespace) -> int:
         return 1
 
 
+def handle_create_project(args: argparse.Namespace) -> int:
+    config = load_runtime_config()
+    ensure_runtime_dirs(config)
+    observer = _observer(config, "create-project", manifest_path=args.manifest)
+    try:
+        service = _project_service(config)
+        project = service.create_project_from_manifest(
+            name=args.name,
+            manifest_path=args.manifest,
+            product_type=args.type,
+            project_id=args.project_id,
+            description=args.description or "",
+            tags=_parse_tags(args.tags),
+            active=not bool(args.inactive),
+        )
+        compatibility = analyze_project_compatibility(project, environment_name="default")
+        observer.update_context(project_name=project.name, project_type=project.product_type)
+        run_metadata = observer.finalize(status="created")
+        _print_json(
+            {
+                "status": "created",
+                "project": project.model_dump(mode="json"),
+                "compatibility": compatibility.model_dump(mode="json"),
+                "project_registry_file": config.paths.project_registry_file,
+                "run_id": run_metadata.run_id,
+                "artifact_dir": run_metadata.artifact_dir,
+            }
+        )
+        return 0
+    except Exception as exc:
+        observer.log(f"create-project failed: {exc}")
+        run_metadata = observer.finalize(status="error")
+        _print_json(
+            {
+                "status": "error",
+                "error": str(exc),
+                "run_id": run_metadata.run_id,
+                "artifact_dir": run_metadata.artifact_dir,
+            }
+        )
+        return 1
+
+
+def handle_list_projects(args: argparse.Namespace) -> int:
+    config = load_runtime_config()
+    ensure_runtime_dirs(config)
+    observer = _observer(config, "list-projects")
+    try:
+        service = _project_service(config)
+        projects = service.list_projects(active_only=bool(args.active_only))
+        run_metadata = observer.finalize(status="listed")
+        _print_json(
+            {
+                "status": "listed",
+                "projects": [item.model_dump(mode="json") for item in projects],
+                "project_registry_file": config.paths.project_registry_file,
+                "run_id": run_metadata.run_id,
+                "artifact_dir": run_metadata.artifact_dir,
+            }
+        )
+        return 0
+    except Exception as exc:
+        observer.log(f"list-projects failed: {exc}")
+        run_metadata = observer.finalize(status="error")
+        _print_json(
+            {
+                "status": "error",
+                "error": str(exc),
+                "run_id": run_metadata.run_id,
+                "artifact_dir": run_metadata.artifact_dir,
+            }
+        )
+        return 1
+
+
+def handle_inspect_project(args: argparse.Namespace) -> int:
+    config = load_runtime_config()
+    ensure_runtime_dirs(config)
+    observer = _observer(config, "inspect-project")
+    try:
+        service = _project_service(config)
+        project = service.inspect_project(args.project_id)
+        if project is None:
+            run_metadata = observer.finalize(status="not_found")
+            _print_json(
+                {
+                    "status": "not_found",
+                    "project_id": args.project_id,
+                    "run_id": run_metadata.run_id,
+                    "artifact_dir": run_metadata.artifact_dir,
+                }
+            )
+            return 1
+        compatibility = analyze_project_compatibility(project, environment_name=args.environment or "default")
+        recent_runs = service.list_runs(project.project_id, limit=5)
+        observer.update_context(project_name=project.name, project_type=project.product_type)
+        run_metadata = observer.finalize(status="inspected")
+        _print_json(
+            {
+                "status": "inspected",
+                "project": project.model_dump(mode="json"),
+                "compatibility": compatibility.model_dump(mode="json"),
+                "recent_runs": [item.model_dump(mode="json") for item in recent_runs],
+                "run_id": run_metadata.run_id,
+                "artifact_dir": run_metadata.artifact_dir,
+            }
+        )
+        return 0
+    except Exception as exc:
+        observer.log(f"inspect-project failed: {exc}")
+        run_metadata = observer.finalize(status="error")
+        _print_json(
+            {
+                "status": "error",
+                "error": str(exc),
+                "run_id": run_metadata.run_id,
+                "artifact_dir": run_metadata.artifact_dir,
+            }
+        )
+        return 1
+
+
+def handle_run_project(args: argparse.Namespace) -> int:
+    config = load_runtime_config()
+    ensure_runtime_dirs(config)
+    service = _project_service(config)
+    project = service.inspect_project(args.project_id)
+    paths = _project_paths(config, args.project_id)
+    observer = RunObserver(
+        runs_dir=paths["runs_dir"],
+        command="run-project",
+        manifest_path=project.default_manifest_path if project else "",
+    )
+    try:
+        if project is None:
+            raise ValueError(f"Project '{args.project_id}' is not registered.")
+
+        environment_name = args.environment or "default"
+        intake = load_and_normalize(project.default_manifest_path)
+        intake.name = project.name
+        intake.project_type = project.product_type
+        environment_override = project.environments.get(environment_name, {})
+        if isinstance(environment_override, dict) and environment_override:
+            environment_config = EnvironmentConfig.model_validate(environment_override)
+            intake.environment_config = environment_config
+            intake.environment = environment_config.model_dump(mode="json")
+            if environment_config.base_url:
+                intake.target = environment_config.base_url
+
+        product_type = project.product_type if project.product_type != "auto" else classify_product(intake)
+        strategy = generate_test_strategy(intake, product_type)
+        adapter = select_adapter(product_type, config)
+        capabilities = adapter_capabilities(product_type)
+        fallback_mode = adapter_fallback_mode(product_type)
+        fallback_note = adapter_fallback_note(product_type)
+        plugin_details = adapter_plugin_inspection(product_type)
+        registry = get_registry()
+        plugin_inspection = registry.inspection_for_product_type(product_type)
+        onboarding = evaluate_plugin_onboarding(plugin_inspection, project_root=".")
+        compatibility = analyze_project_compatibility(project, environment_name=environment_name)
+
+        observer.update_context(project_name=project.name, project_type=product_type, manifest_path=project.default_manifest_path)
+        observer.log(f"Executing project adapter={adapter.name}.")
+        envelope = execute_pipeline(
+            intake,
+            product_type,
+            strategy,
+            adapter,
+            run_id=observer.run_id,
+            started_at=observer.started_at,
+        )
+
+        run_metadata = observer.finalize(status=envelope.status)
+        envelope.run_metadata = run_metadata
+        envelope.project_id = project.project_id
+        envelope.project_tags = list(project.tags)
+        envelope.environment_name = environment_name
+        envelope.compatibility_summary = compatibility.model_dump(mode="json")
+        envelope.metadata["project_id"] = project.project_id
+        envelope.metadata["project_name"] = project.name
+        envelope.metadata["project_tags"] = list(project.tags)
+        envelope.metadata["project_compatibility"] = compatibility.model_dump(mode="json")
+        envelope.metadata["project_artifacts_root"] = str(paths["root"])
+        envelope.metadata["run_observability"] = run_metadata.model_dump(mode="json")
+        envelope.metadata["artifact_dir"] = run_metadata.artifact_dir
+        envelope.metadata["capabilities_used"] = capabilities
+        envelope.metadata["taxonomy_coverage_focus"] = strategy.coverage_focus
+        envelope.metadata["adapter_registry_fallback_mode"] = fallback_mode
+        envelope.metadata["plugin_context"] = plugin_details
+        envelope.capability_path_used = capabilities
+        envelope.plugin = PluginReportContext.model_validate(
+            {
+                "plugin_name": plugin_details["plugin_name"],
+                "plugin_version": plugin_details["plugin_version"],
+                "author": plugin_details.get("author"),
+                "dependencies": plugin_details.get("dependencies", []),
+                "compatibility": plugin_details.get("compatibility", {}),
+                "supported_product_types": plugin_details["supported_product_types"],
+                "supported_capabilities": plugin_details["supported_capabilities"],
+                "fallback_mode": plugin_details["fallback_mode"],
+                "adapter_target": plugin_details["adapter_target"],
+                "health_metadata": plugin_details["health_metadata"],
+                "discovered_from": plugin_details["discovered_from"],
+            }
+        )
+        envelope.plugin_validation = PluginValidationSummary.model_validate(plugin_details["validation"])
+        envelope.plugin_onboarding = onboarding
+        envelope.support_level = plugin_inspection.validation.support_level
+        if fallback_mode != "native" or fallback_note:
+            envelope.metadata["fallback_execution_note"] = fallback_note or f"Adapter fallback mode active: {fallback_mode}"
+        envelope.metadata["plugin_onboarding"] = onboarding.model_dump(mode="json")
+        envelope.metadata["support_level"] = plugin_inspection.validation.support_level
+        envelope.metadata["coverage_catalog_reference"] = config.paths.latest_coverage_catalog_file
+
+        contract_validation = validate_contracts(project.default_manifest_path, check_result_contract=False)
+        envelope.metadata["contract_validation_summary"] = contract_validation.model_dump(mode="json")
+        quality_gates = evaluate_quality_gates(
+            acceptance=envelope.metadata.get("acceptance", {}),
+            summary=envelope.summary,
+            coverage=envelope.coverage,
+            defects=envelope.defects,
+            contract_validation=contract_validation,
+            fallback_mode=fallback_mode,
+        )
+        envelope.quality_gates = quality_gates
+        envelope.metadata["quality_gates"] = quality_gates.model_dump(mode="json")
+        envelope.recommendation.release_ready = envelope.recommendation.release_ready and quality_gates.gate_status == "pass"
+
+        quality_gate_path = paths["quality_gates"]
+        quality_gate_path.parent.mkdir(parents=True, exist_ok=True)
+        quality_gate_path.write_text(json.dumps(quality_gates.model_dump(mode="json"), indent=2), encoding="utf-8")
+
+        result_path = Path(args.output) if args.output else paths["result"]
+        save_execution_result(envelope, result_path)
+        history_record_path = _persist_history_from_execution(envelope, config)
+        gate_exit = _gate_exit_code(quality_gates.gate_status)
+
+        report = generate_report(envelope, config=config)
+        report_json_path = paths["report"]
+        report_md_path = paths["report_md"]
+        report_ci_path = paths["ci"]
+        report_junit_path = paths["junit"]
+        save_report(report, report_json_path)
+        save_markdown_report(report, report_md_path)
+        if bool(args.ci):
+            save_ci_summary(report, report_ci_path)
+            save_junit_report(report, report_junit_path)
+        envelope.ci_summary = report.ci_summary
+        save_execution_result(envelope, result_path)
+
+        report_paths = {
+            "result_json": str(result_path),
+            "report_json": str(report_json_path),
+            "report_markdown": str(report_md_path),
+        }
+        if bool(args.ci):
+            report_paths["ci_summary"] = str(report_ci_path)
+            report_paths["junit"] = str(report_junit_path)
+
+        run_record = RunRegistryRecord(
+            run_id=envelope.run_id,
+            project_id=project.project_id,
+            product_type=product_type,
+            manifest_path=project.default_manifest_path,
+            environment_name=environment_name,
+            environment_type=str(envelope.metadata.get("environment_type")) if envelope.metadata.get("environment_type") else None,
+            started_at=envelope.started_at,
+            finished_at=envelope.finished_at,
+            status=envelope.status,
+            gate_status=quality_gates.gate_status,
+            report_paths=report_paths,
+            artifact_dir=run_metadata.artifact_dir,
+            plugin_used=plugin_details["plugin_name"],
+            summary=envelope.summary,
+            coverage=envelope.coverage,
+            defects=envelope.defects,
+        )
+        add_run_record(config.paths.run_registry_file, run_record)
+
+        _print_json(
+            {
+                "status": "completed",
+                "project_id": project.project_id,
+                "project_name": project.name,
+                "manifest": project.default_manifest_path,
+                "environment_name": environment_name,
+                "project_type": product_type,
+                "adapter": adapter.name,
+                "run_status": envelope.status,
+                "result_file": str(result_path),
+                "report_file": str(report_json_path),
+                "report_markdown_file": str(report_md_path),
+                "history_record_file": history_record_path,
+                "run_registry_file": config.paths.run_registry_file,
+                "summary": envelope.summary.model_dump(mode="json"),
+                "recommendation": envelope.recommendation.model_dump(mode="json"),
+                "plugin_used": plugin_details["plugin_name"],
+                "plugin_version": plugin_details["plugin_version"],
+                "compatibility": compatibility.model_dump(mode="json"),
+                "quality_gates": quality_gates.model_dump(mode="json"),
+                "gate_exit_code": gate_exit,
+                "ci_mode": bool(args.ci),
+                "run_id": run_metadata.run_id,
+                "artifact_dir": run_metadata.artifact_dir,
+            }
+        )
+        if bool(args.ci) or bool(args.exit_on_fail):
+            return gate_exit
+        return 0
+    except Exception as exc:
+        observer.log(f"run-project failed: {exc}")
+        run_metadata = observer.finalize(status="error")
+        _print_json(
+            {
+                "status": "error",
+                "project_id": args.project_id,
+                "error": str(exc),
+                "run_id": run_metadata.run_id,
+                "artifact_dir": run_metadata.artifact_dir,
+            }
+        )
+        return 1
+
+
+def handle_list_runs(args: argparse.Namespace) -> int:
+    config = load_runtime_config()
+    ensure_runtime_dirs(config)
+    observer = _observer(config, "list-runs")
+    try:
+        service = _project_service(config)
+        project = get_registered_project(config.paths.project_registry_file, args.project_id)
+        if project is None:
+            run_metadata = observer.finalize(status="not_found")
+            _print_json(
+                {
+                    "status": "not_found",
+                    "project_id": args.project_id,
+                    "run_id": run_metadata.run_id,
+                    "artifact_dir": run_metadata.artifact_dir,
+                }
+            )
+            return 1
+        runs = service.list_runs(args.project_id, limit=args.limit)
+        observer.update_context(project_name=project.name, project_type=project.product_type)
+        run_metadata = observer.finalize(status="listed")
+        _print_json(
+            {
+                "status": "listed",
+                "project_id": args.project_id,
+                "runs": [item.model_dump(mode="json") for item in runs],
+                "run_registry_file": config.paths.run_registry_file,
+                "run_id": run_metadata.run_id,
+                "artifact_dir": run_metadata.artifact_dir,
+            }
+        )
+        return 0
+    except Exception as exc:
+        observer.log(f"list-runs failed: {exc}")
+        run_metadata = observer.finalize(status="error")
+        _print_json(
+            {
+                "status": "error",
+                "project_id": args.project_id,
+                "error": str(exc),
+                "run_id": run_metadata.run_id,
+                "artifact_dir": run_metadata.artifact_dir,
+            }
+        )
+        return 1
+
+
+def handle_project_summary(args: argparse.Namespace) -> int:
+    config = load_runtime_config()
+    ensure_runtime_dirs(config)
+    observer = _observer(config, "project-summary")
+    try:
+        service = _project_service(config)
+        summary = service.project_summary(args.project_id)
+        if summary is None:
+            run_metadata = observer.finalize(status="not_found")
+            _print_json(
+                {
+                    "status": "not_found",
+                    "project_id": args.project_id,
+                    "run_id": run_metadata.run_id,
+                    "artifact_dir": run_metadata.artifact_dir,
+                }
+            )
+            return 1
+        platform_state = summarize_platform_state(service)
+        output_path = Path(args.output) if args.output else Path(config.paths.latest_project_summary_file)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(json.dumps(summary.model_dump(mode="json"), indent=2), encoding="utf-8")
+        run_metadata = observer.finalize(status="summarized")
+        _print_json(
+            {
+                "status": "summarized",
+                "project_id": args.project_id,
+                "summary_file": str(output_path),
+                "project_summary": summary.model_dump(mode="json"),
+                "platform_summary": platform_state.model_dump(mode="json"),
+                "run_id": run_metadata.run_id,
+                "artifact_dir": run_metadata.artifact_dir,
+            }
+        )
+        return 0
+    except Exception as exc:
+        observer.log(f"project-summary failed: {exc}")
+        run_metadata = observer.finalize(status="error")
+        _print_json(
+            {
+                "status": "error",
+                "project_id": args.project_id,
+                "error": str(exc),
+                "run_id": run_metadata.run_id,
+                "artifact_dir": run_metadata.artifact_dir,
+            }
+        )
+        return 1
+
+
+def handle_project_trends(args: argparse.Namespace) -> int:
+    config = load_runtime_config()
+    ensure_runtime_dirs(config)
+    observer = _observer(config, "project-trends")
+    try:
+        service = _project_service(config)
+        payload = service.project_trends(args.project_id)
+        if payload is None:
+            run_metadata = observer.finalize(status="not_found")
+            _print_json(
+                {
+                    "status": "not_found",
+                    "project_id": args.project_id,
+                    "run_id": run_metadata.run_id,
+                    "artifact_dir": run_metadata.artifact_dir,
+                }
+            )
+            return 1
+        output_path = Path(args.output) if args.output else Path(config.paths.latest_project_trends_file)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        run_metadata = observer.finalize(status="analyzed")
+        _print_json(
+            {
+                "status": "analyzed",
+                "project_id": args.project_id,
+                "project_trends_file": str(output_path),
+                "project_trends": payload,
+                "run_id": run_metadata.run_id,
+                "artifact_dir": run_metadata.artifact_dir,
+            }
+        )
+        return 0
+    except Exception as exc:
+        observer.log(f"project-trends failed: {exc}")
+        run_metadata = observer.finalize(status="error")
+        _print_json(
+            {
+                "status": "error",
+                "project_id": args.project_id,
+                "error": str(exc),
+                "run_id": run_metadata.run_id,
+                "artifact_dir": run_metadata.artifact_dir,
+            }
+        )
+        return 1
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="uta", description="Universal Testing Agent CLI")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -893,6 +1393,48 @@ def build_parser() -> argparse.ArgumentParser:
     run_parser.add_argument("--ci", action="store_true", help="Enable CI mode sidecar outputs and gate-based exit codes")
     run_parser.add_argument("--exit-on-fail", action="store_true", help="Return quality-gate exit code for CI pipelines")
     run_parser.set_defaults(handler=handle_run)
+
+    create_project_parser = subparsers.add_parser("create-project", help="Register a reusable project")
+    create_project_parser.add_argument("--name", required=True, help="Project display name")
+    create_project_parser.add_argument("--manifest", required=True, help="Default manifest path")
+    create_project_parser.add_argument("--type", default=None, help="Optional product type override")
+    create_project_parser.add_argument("--project-id", default=None, help="Project identifier")
+    create_project_parser.add_argument("--description", default="", help="Project description")
+    create_project_parser.add_argument("--tags", default="", help="Comma-separated tags")
+    create_project_parser.add_argument("--inactive", action="store_true", help="Register project as inactive")
+    create_project_parser.set_defaults(handler=handle_create_project)
+
+    list_projects_parser = subparsers.add_parser("list-projects", help="List registered projects")
+    list_projects_parser.add_argument("--active-only", action="store_true", help="Return only active projects")
+    list_projects_parser.set_defaults(handler=handle_list_projects)
+
+    inspect_project_parser = subparsers.add_parser("inspect-project", help="Inspect a project and compatibility details")
+    inspect_project_parser.add_argument("project_id", help="Project identifier")
+    inspect_project_parser.add_argument("--environment", default=None, help="Environment name override")
+    inspect_project_parser.set_defaults(handler=handle_inspect_project)
+
+    run_project_parser = subparsers.add_parser("run-project", help="Execute using a registered project")
+    run_project_parser.add_argument("project_id", help="Project identifier")
+    run_project_parser.add_argument("--environment", default="default", help="Environment name")
+    run_project_parser.add_argument("--output", default=None, help="Optional result JSON path")
+    run_project_parser.add_argument("--ci", action="store_true", help="Enable CI mode sidecar outputs and gate-based exit codes")
+    run_project_parser.add_argument("--exit-on-fail", action="store_true", help="Return quality-gate exit code for CI pipelines")
+    run_project_parser.set_defaults(handler=handle_run_project)
+
+    list_runs_parser = subparsers.add_parser("list-runs", help="List runs for a registered project")
+    list_runs_parser.add_argument("project_id", help="Project identifier")
+    list_runs_parser.add_argument("--limit", type=int, default=20, help="Maximum runs to return")
+    list_runs_parser.set_defaults(handler=handle_list_runs)
+
+    project_summary_parser = subparsers.add_parser("project-summary", help="Summarize project quality and recent status")
+    project_summary_parser.add_argument("project_id", help="Project identifier")
+    project_summary_parser.add_argument("--output", default=None, help="Optional output path for summary JSON")
+    project_summary_parser.set_defaults(handler=handle_project_summary)
+
+    project_trends_parser = subparsers.add_parser("project-trends", help="Analyze trend signals for one project")
+    project_trends_parser.add_argument("project_id", help="Project identifier")
+    project_trends_parser.add_argument("--output", default=None, help="Optional output path for trends JSON")
+    project_trends_parser.set_defaults(handler=handle_project_trends)
 
     report_parser = subparsers.add_parser("report", help="Generate standardized report from result JSON")
     report_parser.add_argument("result_json", help="Path to execution result JSON")

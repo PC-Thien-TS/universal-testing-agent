@@ -1,0 +1,47 @@
+title: Run Registry Schema v2.0
+type: object
+required:
+  - run_id
+  - project_id
+  - product_type
+  - manifest_path
+  - started_at
+  - finished_at
+  - status
+  - report_paths
+  - artifact_dir
+  - plugin_used
+  - summary
+properties:
+  run_id:
+    type: string
+  project_id:
+    type: string
+  product_type:
+    type: string
+  manifest_path:
+    type: string
+  environment_name:
+    type: [string, "null"]
+  environment_type:
+    type: [string, "null"]
+  started_at:
+    type: string
+  finished_at:
+    type: string
+  status:
+    type: string
+  gate_status:
+    type: [string, "null"]
+  report_paths:
+    type: object
+  artifact_dir:
+    type: string
+  plugin_used:
+    type: string
+  summary:
+    type: object
+  coverage:
+    type: object
+  defects:
+    type: object

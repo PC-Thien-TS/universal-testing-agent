@@ -1,6 +1,11 @@
 paths:
   results_dir: results
   runs_dir: results/runs
+  projects_dir: results/projects
+  project_registry_file: results/projects/registry.json
+  run_registry_file: results/projects/run_registry.json
+  latest_project_summary_file: results/projects/project_summary_latest.json
+  latest_project_trends_file: results/projects/project_trends_latest.json
   evidence_dir: evidence
   latest_result_file: results/latest.json
   latest_plan_file: results/plan_latest.json

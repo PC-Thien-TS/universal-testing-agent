@@ -11,6 +11,11 @@ from pydantic import BaseModel, Field
 class PathSettings(BaseModel):
     results_dir: str = "results"
     runs_dir: str = "results/runs"
+    projects_dir: str = "results/projects"
+    project_registry_file: str = "results/projects/registry.json"
+    run_registry_file: str = "results/projects/run_registry.json"
+    latest_project_summary_file: str = "results/projects/project_summary_latest.json"
+    latest_project_trends_file: str = "results/projects/project_trends_latest.json"
     evidence_dir: str = "evidence"
     latest_result_file: str = "results/latest.json"
     latest_plan_file: str = "results/plan_latest.json"
@@ -89,6 +94,16 @@ def load_runtime_config(config_path: str | Path | None = None) -> RuntimeConfig:
         config.paths.latest_result_file = value
     if value := os.getenv("UTA_RUNS_DIR"):
         config.paths.runs_dir = value
+    if value := os.getenv("UTA_PROJECTS_DIR"):
+        config.paths.projects_dir = value
+    if value := os.getenv("UTA_PROJECT_REGISTRY_FILE"):
+        config.paths.project_registry_file = value
+    if value := os.getenv("UTA_RUN_REGISTRY_FILE"):
+        config.paths.run_registry_file = value
+    if value := os.getenv("UTA_PROJECT_SUMMARY_FILE"):
+        config.paths.latest_project_summary_file = value
+    if value := os.getenv("UTA_PROJECT_TRENDS_FILE"):
+        config.paths.latest_project_trends_file = value
     if value := os.getenv("UTA_PLAN_FILE"):
         config.paths.latest_plan_file = value
     if value := os.getenv("UTA_REPORT_FILE"):
@@ -156,6 +171,11 @@ def load_runtime_config(config_path: str | Path | None = None) -> RuntimeConfig:
 def ensure_runtime_dirs(config: RuntimeConfig) -> None:
     Path(config.paths.results_dir).mkdir(parents=True, exist_ok=True)
     Path(config.paths.runs_dir).mkdir(parents=True, exist_ok=True)
+    Path(config.paths.projects_dir).mkdir(parents=True, exist_ok=True)
+    Path(config.paths.project_registry_file).parent.mkdir(parents=True, exist_ok=True)
+    Path(config.paths.run_registry_file).parent.mkdir(parents=True, exist_ok=True)
+    Path(config.paths.latest_project_summary_file).parent.mkdir(parents=True, exist_ok=True)
+    Path(config.paths.latest_project_trends_file).parent.mkdir(parents=True, exist_ok=True)
     Path(config.paths.evidence_dir).mkdir(parents=True, exist_ok=True)
     Path(config.paths.latest_result_file).parent.mkdir(parents=True, exist_ok=True)
     Path(config.paths.latest_plan_file).parent.mkdir(parents=True, exist_ok=True)

@@ -115,7 +115,7 @@ def test_reporter_includes_plugin_metadata_from_envelope() -> None:
         recommendation=Recommendation(release_ready=True, notes=["ready"]),
         plugin={
             "plugin_name": "llm_app",
-            "plugin_version": "1.9.0",
+            "plugin_version": "2.0.0",
             "author": "UTA Core Team",
             "dependencies": ["requests>=2.31"],
             "compatibility": {"python": ">=3.11,<3.13"},

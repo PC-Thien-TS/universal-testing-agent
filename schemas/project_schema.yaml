@@ -1,0 +1,34 @@
+title: Project Registry Schema v2.0
+type: object
+required:
+  - project_id
+  - name
+  - product_type
+  - default_manifest_path
+  - environments
+  - active
+  - created_at
+  - updated_at
+properties:
+  project_id:
+    type: string
+  name:
+    type: string
+  product_type:
+    type: string
+  description:
+    type: string
+  tags:
+    type: array
+    items:
+      type: string
+  default_manifest_path:
+    type: string
+  environments:
+    type: object
+  active:
+    type: boolean
+  created_at:
+    type: string
+  updated_at:
+    type: string

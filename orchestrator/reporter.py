@@ -41,6 +41,9 @@ def _load_optional_model(path: Path, model: type[TModel]) -> TModel | None:
 
 def _existing_artifact_references(envelope: ExecutionEnvelope, config: RuntimeConfig) -> list[str]:
     references = list(envelope.generated_artifacts)
+    project_root = envelope.metadata.get("project_artifacts_root") if isinstance(envelope.metadata, dict) else None
+    if isinstance(project_root, str) and project_root:
+        references.append(project_root)
     well_known = [
         Path(config.paths.latest_checklist_file),
         Path(config.paths.latest_checklist_markdown_file),
@@ -239,9 +242,13 @@ def generate_report(envelope: ExecutionEnvelope, config: RuntimeConfig | None = 
 
     environment_summary = _environment_summary(envelope)
     dataset_evaluation_summary = _dataset_evaluation_summary(envelope)
+    compatibility_summary = envelope.compatibility_summary or {}
+    if not compatibility_summary and isinstance(envelope.metadata.get("project_compatibility"), dict):
+        compatibility_summary = envelope.metadata.get("project_compatibility", {})
 
     report = StandardReport(
         run_id=envelope.run_id,
+        project_id=envelope.project_id,
         project_name=envelope.project_name,
         project_type=envelope.project_type,
         adapter=envelope.adapter,
@@ -277,6 +284,9 @@ def generate_report(envelope: ExecutionEnvelope, config: RuntimeConfig | None = 
         assumptions=assumptions,
         artifact_references=artifact_references,
         run_metadata=envelope.run_metadata,
+        environment_name=envelope.environment_name,
+        project_tags=envelope.project_tags,
+        compatibility_summary=compatibility_summary,
         capabilities_used=capabilities_used,
         capability_coverage_summary=capability_coverage_summary,
         taxonomy_coverage_focus=taxonomy_coverage_focus,
@@ -405,6 +415,7 @@ def render_markdown_report(report: StandardReport) -> str:
     return f"""# Universal Testing Agent Report
 
 ## Project Summary
+- Project ID: `{report.project_id or "(none)"}`
 - Run ID: `{report.run_id}`
 - Project: `{report.project_name}`
 - Project Type: `{report.project_type}`
@@ -416,6 +427,7 @@ def render_markdown_report(report: StandardReport) -> str:
 
 ## Environment Summary
 {environment_section}
+- Environment Name: `{report.environment_name or "(none)"}`
 
 ## Execution Summary
 - Total Checks: `{report.summary.total_checks}`
@@ -488,6 +500,9 @@ def render_markdown_report(report: StandardReport) -> str:
 
 ## Plugin Onboarding
 {onboarding_section}
+
+## Project Compatibility Summary
+{_format_list([f"{key}: {value}" for key, value in report.compatibility_summary.items()])}
 
 ## Support Level
 - {report.support_level or "(none)"}
@@ -627,6 +642,7 @@ def build_ci_summary(report: StandardReport) -> dict[str, object]:
     gate_exit_code = 2 if gate_status == "fail" else 1 if gate_status == "warning" else 0
     return {
         "run_id": report.run_id,
+        "project_id": report.project_id,
         "project_name": report.project_name,
         "project_type": report.project_type,
         "status": report.status,

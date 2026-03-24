@@ -237,6 +237,83 @@ class CoverageCatalogSummary(UtaModel):
     entries: list[CoverageCatalogEntry] = Field(default_factory=list)
 
 
+class ProjectRecord(UtaModel):
+    project_id: str
+    name: str
+    product_type: str
+    description: str = ""
+    tags: list[str] = Field(default_factory=list)
+    default_manifest_path: str
+    environments: dict[str, dict[str, Any]] = Field(default_factory=dict)
+    active: bool = True
+    created_at: str
+    updated_at: str
+
+
+class ProjectRegistryStore(UtaModel):
+    projects: list[ProjectRecord] = Field(default_factory=list)
+
+
+class RunRegistryRecord(UtaModel):
+    run_id: str
+    project_id: str
+    product_type: str
+    manifest_path: str
+    environment_name: str | None = None
+    environment_type: str | None = None
+    started_at: str
+    finished_at: str
+    status: str
+    gate_status: str | None = None
+    report_paths: dict[str, str] = Field(default_factory=dict)
+    artifact_dir: str = ""
+    plugin_used: str = ""
+    summary: SummaryStats = Field(default_factory=SummaryStats)
+    coverage: CoverageStats = Field(default_factory=CoverageStats)
+    defects: DefectSummary = Field(default_factory=DefectSummary)
+
+
+class RunRegistryStore(UtaModel):
+    runs: list[RunRegistryRecord] = Field(default_factory=list)
+
+
+class ProjectCompatibilitySummary(UtaModel):
+    project_id: str
+    product_type: str
+    plugin_name: str
+    plugin_version: str
+    support_level: str
+    fallback_mode: str
+    supports_required_capabilities: bool
+    missing_capabilities: list[str] = Field(default_factory=list)
+    fallback_only: bool = False
+    missing_recommended_capabilities: list[str] = Field(default_factory=list)
+    environment_notes: list[str] = Field(default_factory=list)
+
+
+class ProjectRunSummary(UtaModel):
+    project_id: str
+    project_name: str
+    product_type: str
+    total_runs: int = 0
+    latest_run: RunRegistryRecord | None = None
+    pass_rate: float = 0.0
+    gate_pass_rate: float = 0.0
+    trend: str = "stable"
+    flaky_summary: str = "stable"
+    compatibility: ProjectCompatibilitySummary | None = None
+
+
+class PlatformStateSummary(UtaModel):
+    generated_at: str
+    total_projects: int = 0
+    active_projects: int = 0
+    total_runs: int = 0
+    pass_rate: float = 0.0
+    gate_pass_rate: float = 0.0
+    projects: list[ProjectRunSummary] = Field(default_factory=list)
+
+
 class HistoryRecord(UtaModel):
     run_id: str
     timestamp: str
@@ -305,6 +382,7 @@ class ExecutionResult(UtaModel):
 
 class ExecutionEnvelope(UtaModel):
     run_id: str
+    project_id: str | None = None
     project_name: str
     project_type: str
     adapter: str
@@ -326,6 +404,9 @@ class ExecutionEnvelope(UtaModel):
     policy: PolicyEvaluation | None = None
     quality_gates: QualityGateResult | None = None
     run_metadata: RunMetadata | None = None
+    environment_name: str | None = None
+    project_tags: list[str] = Field(default_factory=list)
+    compatibility_summary: dict[str, Any] = Field(default_factory=dict)
     generated_artifacts: list[str] = Field(default_factory=list)
     known_gaps: list[str] = Field(default_factory=list)
     assumptions: list[str] = Field(default_factory=list)
@@ -336,6 +417,7 @@ class ExecutionEnvelope(UtaModel):
 
 class StandardReport(UtaModel):
     run_id: str
+    project_id: str | None = None
     project_name: str
     project_type: str
     adapter: str
@@ -368,6 +450,9 @@ class StandardReport(UtaModel):
     assumptions: list[str] = Field(default_factory=list)
     artifact_references: list[str] = Field(default_factory=list)
     run_metadata: RunMetadata | None = None
+    environment_name: str | None = None
+    project_tags: list[str] = Field(default_factory=list)
+    compatibility_summary: dict[str, Any] = Field(default_factory=dict)
     capabilities_used: list[str] = Field(default_factory=list)
     capability_coverage_summary: dict[str, Any] = Field(default_factory=dict)
     taxonomy_coverage_focus: list[str] = Field(default_factory=list)

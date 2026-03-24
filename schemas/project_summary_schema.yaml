@@ -1,0 +1,32 @@
+title: Project Summary Schema v2.0
+type: object
+required:
+  - project_id
+  - project_name
+  - product_type
+  - total_runs
+  - pass_rate
+  - gate_pass_rate
+  - trend
+  - flaky_summary
+properties:
+  project_id:
+    type: string
+  project_name:
+    type: string
+  product_type:
+    type: string
+  total_runs:
+    type: integer
+  latest_run:
+    type: [object, "null"]
+  pass_rate:
+    type: number
+  gate_pass_rate:
+    type: number
+  trend:
+    type: string
+  flaky_summary:
+    type: string
+  compatibility:
+    type: [object, "null"]

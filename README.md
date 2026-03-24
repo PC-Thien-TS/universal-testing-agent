@@ -258,6 +258,44 @@ Universal Testing Agent (`uta`) is a manifest-driven AI testing orchestrator for
   - `manifests/samples/rag_eval_dataset.json`
   - `manifests/samples/llm_eval_dataset.json`
 
+## v2.0 Release Highlights
+
+- Universal Testing Platform foundation:
+  - Added project registry (`orchestrator/project_registry.py`) with persistent project metadata.
+  - Added run registry (`orchestrator/run_registry.py`) for project-linked run history records.
+- Project-aware execution:
+  - New `run-project <project_id>` command resolves default manifest + environment context.
+  - Project-scoped artifact directories:
+    - `results/projects/<project_id>/runs/<run_id>/`
+  - Project-scoped outputs:
+    - `results/projects/<project_id>/latest.json`
+    - `results/projects/<project_id>/report_latest.json`
+- New project CLI commands:
+  - `create-project`
+  - `list-projects`
+  - `inspect-project`
+  - `run-project`
+  - `list-runs`
+  - `project-summary`
+  - `project-trends`
+- Platform service layer (dashboard/API-ready, offline-safe):
+  - `orchestrator/project_service.py`
+  - `orchestrator/platform_summary.py`
+  - reusable aggregation for latest status per project and global platform state.
+- Project-level compatibility analysis:
+  - `orchestrator/compatibility.py`
+  - plugin capability fit, fallback-only visibility, missing capability notes, environment notes.
+- Reporting upgrades:
+  - project-aware report fields:
+    - `project_id`
+    - `environment_name`
+    - `project_tags`
+    - `compatibility_summary`
+- New schemas:
+  - `schemas/project_schema.yaml`
+  - `schemas/run_registry_schema.yaml`
+  - `schemas/project_summary_schema.yaml`
+
 ## Requirements
 
 - Python 3.11+
@@ -296,10 +334,17 @@ uta run manifests/samples/data_pipeline_validation.yaml
 uta coverage-catalog
 uta scaffold-plugin sample_custom_product
 uta export-plugin web
-uta import-plugin results/plugin_packages/web-1.9.0.json
+uta import-plugin results/plugin_packages/web-2.0.0.json
 uta run manifests/samples/data_pipeline_validation.yaml --ci --exit-on-fail
 uta report results/latest.json --format ci --ci
 uta report results/latest.json --format junit --ci
+uta create-project --name sample-rag --manifest manifests/samples/rag_app_eval.yaml --type rag_app
+uta list-projects
+uta inspect-project sample-rag
+uta run-project sample-rag
+uta list-runs sample-rag
+uta project-summary sample-rag
+uta project-trends sample-rag
 ```
 
 ## Project Layout
